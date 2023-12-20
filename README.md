@@ -1,5 +1,4 @@
 # JSONdiff
-# JSONdiff
 
 ## Introduction
 This package is designed for analyzing differences between JSON files. I have utilized 'RapidJSON' as the parser for these files and developed my own differ algorithm.

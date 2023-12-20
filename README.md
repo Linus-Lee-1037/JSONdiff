@@ -49,7 +49,7 @@ function LCS(level):
             j = j - 1
 
     return pair_list
-'''
+```
 ## Examples
 For left.json and right.json, result.txt is running under the default-fast mode and result0.txt is running under the advanced mode using the default similarity threshold.
 For left1.json and right1.json, result1.txt is running under the default-fast mode and result2.txt is running under the advanced mode using the default similarity threshold.

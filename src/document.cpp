@@ -75,7 +75,7 @@ std::string Linus::jsondiff::TreeLevel::get_key()
     return key.str();
 }
 
-Linus::jsondiff::JsonDiffer::JsonDiffer(const rapidjson::Value& left_input, const rapidjson::Value& right_input, bool advanced, double similarity_threshold) :left(left_input), right(right_input), advanced_mode(advanced), SIMILARITY_THRESHOLD(similarity_threshold)
+Linus::jsondiff::JsonDiffer::JsonDiffer(const rapidjson::Value& left_input, const rapidjson::Value& right_input, bool advanced, double similarity_threshold, int thread_count) :left(left_input), right(right_input), advanced_mode(advanced), SIMILARITY_THRESHOLD(similarity_threshold), num_thread(thread_count)
 {
 
 }
@@ -144,6 +144,114 @@ double Linus::jsondiff::JsonDiffer::compare_array_fast(Linus::jsondiff::TreeLeve
     return total_score / max_len;
 }
 
+void Linus::jsondiff::JsonDiffer::parallel_diff_level(std::queue<std::pair<unsigned int, unsigned int>>& work_queue, std::vector<std::vector<double>>& dp, Linus::jsondiff::TreeLevel& level, std::mutex& work_queue_mutex, std::mutex& dp_mutex)
+{
+    while (true)
+    {
+        std::pair<unsigned int, unsigned int> task;
+        {
+            std::lock_guard<std::mutex> lock(work_queue_mutex);
+            if (work_queue.empty())
+            {
+                break;
+            }
+            task = work_queue.front();
+            work_queue.pop();
+            //std::cout << std::to_string(task.first) << ":" << std::to_string(task.second) << std::endl;
+        }
+        Linus::jsondiff::TreeLevel level_(level.left[task.first], level.right[task.second], level.left_path + "[" + std::to_string(task.first) + "]", level.right_path + "[" + std::to_string(task.second) + "]", level.left_path);
+        double score_ = diff_level(level_, true);
+        {
+            std::lock_guard<std::mutex> lock(dp_mutex);
+            dp[task.first + 1][task.second + 1] = score_;
+        }
+    }
+}
+
+std::map<unsigned int, unsigned int> Linus::jsondiff::JsonDiffer::parallel_LCS(Linus::jsondiff::TreeLevel level)
+{
+    unsigned int len_left = level.left.Size();
+    unsigned int len_right = level.right.Size();
+    std::vector<std::vector<double>> dp(len_left + 1, std::vector<double>(len_right + 1, 0.0));
+    std::queue<std::pair<unsigned int, unsigned int>> work_queue;
+    for (unsigned int i = 0; i < len_left; ++i)
+    {
+        for (unsigned int j = 0; j < len_right; ++j)
+        {
+            work_queue.push(std::make_pair(i, j));
+        }
+    }
+    std::mutex work_queue_mutex;
+    std::mutex dp_mutex;
+    std::vector<std::thread> threads;
+    for (int i = 0; i < num_thread; ++i)
+    {
+        threads.push_back(std::thread(&Linus::jsondiff::JsonDiffer::parallel_diff_level, this, std::ref(work_queue), std::ref(dp), std::ref(level), std::ref(work_queue_mutex), std::ref(dp_mutex)));
+    }
+    for (auto& thread : threads)
+    {
+        thread.join();
+    }
+    //output dp table
+    /*std::cout << "Before reconstruction" << std::endl;
+    for (unsigned int i = 0; i <= len_left; ++i)
+    {
+        for (unsigned int j = 0; j <= len_right; ++j)
+        {
+            std::cout << dp[i][j] << " ";
+        }
+        std::cout << std::endl;
+    }*/
+    //reconstruct dp table according to the result of parallel computing
+    for (unsigned int i = 1; i <= len_left; ++i)
+    {
+        for (unsigned int j = 1; j <= len_right; ++j)
+        {
+            if (dp[i][j] > 0)
+            {
+                dp[i][j] += dp[i - 1][j - 1];
+            }
+            else
+            {
+                dp[i][j] = std::max(dp[i - 1][j], dp[i][j - 1]);
+            }
+        }
+    }
+    //output dp table
+    /*std::cout << "After reconstruction" << std::endl;
+    for (unsigned int i = 0; i <= len_left; ++i)
+    {
+        for (unsigned int j = 0; j <= len_right; ++j)
+        {
+            std::cout << dp[i][j] << " ";
+        }
+        std::cout << std::endl;
+    }*/
+    std::map<unsigned int, unsigned int> pair_list;
+    unsigned int i = len_left;
+    unsigned int j = len_right;
+    while (i > 0 && j > 0)
+    {
+        Linus::jsondiff::TreeLevel level_(level.left[i - 1], level.right[j - 1], level.left_path + "[" + std::to_string(i - 1) + "]", level.right_path + "[" + std::to_string(j - 1) + "]", level.left_path);
+        double score_ = diff_level(level_, true);
+        if (score_ > SIMILARITY_THRESHOLD)
+        {
+            pair_list[i - 1] = j - 1;
+            --i;
+            --j;
+        }
+        else if (dp[i - 1][j] > dp[i][j - 1])
+        {
+            --i;
+        }
+        else
+        {
+            --j;
+        }
+    }
+    return pair_list;
+}
+
 std::map<unsigned int, unsigned int> Linus::jsondiff::JsonDiffer::LCS(Linus::jsondiff::TreeLevel level)
 {
     unsigned int len_left = level.left.Size();
@@ -192,7 +300,16 @@ std::map<unsigned int, unsigned int> Linus::jsondiff::JsonDiffer::LCS(Linus::jso
 
 double Linus::jsondiff::JsonDiffer::compare_array_advanced(Linus::jsondiff::TreeLevel level, bool drill)
 {
-    std::map<unsigned int, unsigned int> pairlist = LCS(level);
+    std::map<unsigned int, unsigned int> pairlist;
+    if (num_thread == 1)
+    {
+        pairlist = LCS(level);
+    }
+    else
+    {
+        pairlist = parallel_LCS(level);
+    }
+        
     std::vector<unsigned int> paired_left;
     std::vector<unsigned int> paired_right;
     for (const auto& pair : pairlist)

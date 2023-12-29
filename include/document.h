@@ -11,6 +11,9 @@
 #include <stdexcept>
 #include <regex>
 #include <algorithm>
+#include <thread>
+#include <mutex>
+#include <queue>
 using namespace rapidjson;
 using namespace std;
 
@@ -53,11 +56,14 @@ namespace Linus
                 std::map<std::string, double> cache;
                 std::map<std::string, std::vector<std::string>> records;
                 bool advanced_mode;
-                JsonDiffer(const rapidjson::Value& left_input, const rapidjson::Value& right_input, bool advanced, double similarity_threshold);
+                int num_thread;
+                JsonDiffer(const rapidjson::Value& left_input, const rapidjson::Value& right_input, bool advanced, double similarity_threshold, int thread_count);
                 void report(std::string event, Linus::jsondiff::TreeLevel level);
                 std::map<std::string, std::vector<std::string>> to_info();
                 double compare_array(Linus::jsondiff::TreeLevel level, bool drill);
                 double compare_array_fast(Linus::jsondiff::TreeLevel level, bool drill);
+                void parallel_diff_level(std::queue<std::pair<unsigned int, unsigned int>>& work_queue, std::vector<std::vector<double>>& dp, Linus::jsondiff::TreeLevel& level, std::mutex& work_queue_mutex, std::mutex& dp_mutex);
+                std::map<unsigned int, unsigned int> parallel_LCS(Linus::jsondiff::TreeLevel level);
                 std::map<unsigned int, unsigned int> LCS(Linus::jsondiff::TreeLevel level);
                 double compare_array_advanced(Linus::jsondiff::TreeLevel level, bool drill);
                 double compare_object(Linus::jsondiff::TreeLevel level, bool drill);

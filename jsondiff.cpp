@@ -34,7 +34,7 @@ void PrintRecords(std::map<std::string, std::vector<std::string>> records)
     }
 }
 
-void run(std::string left, std::string right, bool advanced_mode, double similarity_threshold)
+void run(std::string left, std::string right, bool advanced_mode, double similarity_threshold, int thread_count)
 {
     try 
     {
@@ -44,7 +44,7 @@ void run(std::string left, std::string right, bool advanced_mode, double similar
         //cout << Linus::jsondiff::ValueToString(left_json) << endl;
         const rapidjson::Value& right_json = right_json_;
         //cout << Linus::jsondiff::ValueToString(right_json) << endl;
-        Linus::jsondiff::JsonDiffer jsondiffer(left_json, right_json, advanced_mode, similarity_threshold);
+        Linus::jsondiff::JsonDiffer jsondiffer(left_json, right_json, advanced_mode, similarity_threshold, thread_count);
         bool same = jsondiffer.diff();
         std::string result = same ? "Same" : "Different";
         std::cout << result << std::endl;
@@ -61,6 +61,7 @@ int main(int argc, char * argv[])
     std::string left, right;
     bool advanced_mode = false;
     double similarity_threshold = 0.5;
+    int thread_count = 1;
     for (int i = 1; i < argc; ++i)
     {
         std::string arg = argv[i];
@@ -93,18 +94,33 @@ int main(int argc, char * argv[])
                 std::cerr << "Similarity threshold out of range: " << argv[i] << std::endl;
             }
         }
+        if ((arg == "-nthreads" || arg == "-N") && i + 1 < argc)
+        {
+            try 
+            {
+                thread_count = std::stoi(argv[++i]);
+            } 
+            catch (const std::invalid_argument& e) 
+            {
+                std::cerr << "Invalid thread count: " << argv[i] << std::endl;
+            }
+            catch (const std::out_of_range& e)
+            {
+                std::cerr << "Thread cound out of range: " << argv[i] << std::endl;
+            }
+        }
     }
-    run(left, right, advanced_mode, similarity_threshold);
+    run(left, right, advanced_mode, similarity_threshold, thread_count);
     return 0;
 }
 
 
 /*int main ()
 {
-    std::string json1 = "{\"person\":[1, {\"name\":\"Peter\"},3,4]}";
-    std::string json2 = "{\"person\":[1, {\"name\":\"Linus\"},3,4]}";
+    std::string json1 = "{\"number\":[1,2,3,4,5]}";
+    std::string json2 = "{\"number\":[1,2,4,5]}";
     cout << json1 << endl;
     cout << json2 << endl;
-    run(json1, json2, false);
+    run(json1, json2, true, 0.5, 12);
     return 0;
 }*/

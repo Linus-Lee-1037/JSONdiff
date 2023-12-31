@@ -14,6 +14,7 @@
 #include <thread>
 #include <mutex>
 #include <queue>
+#include <chrono>
 using namespace rapidjson;
 using namespace std;
 
@@ -57,6 +58,7 @@ namespace Linus
                 std::map<std::string, std::vector<std::string>> records;
                 bool advanced_mode;
                 int num_thread;
+                std::mutex cache_mutex;
                 JsonDiffer(const rapidjson::Value& left_input, const rapidjson::Value& right_input, bool advanced, double similarity_threshold, int thread_count);
                 void report(std::string event, Linus::jsondiff::TreeLevel level);
                 std::map<std::string, std::vector<std::string>> to_info();

@@ -58,6 +58,7 @@ void run(std::string left, std::string right, bool advanced_mode, double similar
 
 int main(int argc, char * argv[])
 {
+    auto start = std::chrono::high_resolution_clock::now();
     std::string left, right;
     bool advanced_mode = false;
     double similarity_threshold = 0.5;
@@ -111,16 +112,19 @@ int main(int argc, char * argv[])
         }
     }
     run(left, right, advanced_mode, similarity_threshold, thread_count);
+    auto finish = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed = finish - start;
+    std::cout << "Total time: " << elapsed.count() << " s\n";
     return 0;
 }
 
 
 /*int main ()
 {
-    std::string json1 = "{\"number\":[1,2,3,4,5]}";
-    std::string json2 = "{\"number\":[1,2,4,5]}";
-    cout << json1 << endl;
-    cout << json2 << endl;
-    run(json1, json2, true, 0.5, 12);
+    //std::string json1 = "{\"number\":[1,2,3,4,5]}";
+    //std::string json2 = "{\"number\":[1,2,4,5]}";
+    std::string json1 = ".\\left2.json";
+    std::string json2 = ".\\right2.json";
+    run(json1, json2, true, 0.5, 6);
     return 0;
 }*/

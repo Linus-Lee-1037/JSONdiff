@@ -146,24 +146,39 @@ double Linus::jsondiff::JsonDiffer::compare_array_fast(Linus::jsondiff::TreeLeve
 
 void Linus::jsondiff::JsonDiffer::parallel_diff_level(std::queue<std::pair<unsigned int, unsigned int>>& work_queue, std::vector<std::vector<double>>& dp, Linus::jsondiff::TreeLevel& level, std::mutex& work_queue_mutex, std::mutex& dp_mutex)
 {
-    while (true)
+    bool ctn = true;
+    int volumn = 6;
+    while (ctn)
     {
-        std::pair<unsigned int, unsigned int> task;
+        std::vector<std::pair<unsigned int, unsigned int>> task_list(volumn);
+        int count = 0;
         {
             std::lock_guard<std::mutex> lock(work_queue_mutex);
-            if (work_queue.empty())
+            for (int i = 0; i < volumn; ++i)
             {
-                break;
+                if (work_queue.empty())
+                {
+                    ctn = false;
+                    break;
+                }
+                task_list[i] = work_queue.front();
+                work_queue.pop();
+                ++count;
             }
-            task = work_queue.front();
-            work_queue.pop();
             //std::cout << std::to_string(task.first) << ":" << std::to_string(task.second) << std::endl;
         }
-        Linus::jsondiff::TreeLevel level_(level.left[task.first], level.right[task.second], level.left_path + "[" + std::to_string(task.first) + "]", level.right_path + "[" + std::to_string(task.second) + "]", level.left_path);
-        double score_ = diff_level(level_, true);
+        std::vector<double> score_(volumn);
+        for (int i = 0; i < count; ++i)
+        {
+            Linus::jsondiff::TreeLevel level_(level.left[task_list[i].first], level.right[task_list[i].second], level.left_path + "[" + std::to_string(task_list[i].first) + "]", level.right_path + "[" + std::to_string(task_list[i].second) + "]", level.left_path);
+            score_[i] = _diff_level(level_, true);
+        }
         {
             std::lock_guard<std::mutex> lock(dp_mutex);
-            dp[task.first + 1][task.second + 1] = score_;
+            for (int i = 0; i < count; ++i)
+            {
+                dp[task_list[i].first + 1][task_list[i].second + 1] = score_[i];
+            }
         }
     }
 }
@@ -174,6 +189,9 @@ std::map<unsigned int, unsigned int> Linus::jsondiff::JsonDiffer::parallel_LCS(L
     unsigned int len_right = level.right.Size();
     std::vector<std::vector<double>> dp(len_left + 1, std::vector<double>(len_right + 1, 0.0));
     std::queue<std::pair<unsigned int, unsigned int>> work_queue;
+
+    auto pLstart = std::chrono::high_resolution_clock::now();
+
     for (unsigned int i = 0; i < len_left; ++i)
     {
         for (unsigned int j = 0; j < len_right; ++j)
@@ -181,17 +199,35 @@ std::map<unsigned int, unsigned int> Linus::jsondiff::JsonDiffer::parallel_LCS(L
             work_queue.push(std::make_pair(i, j));
         }
     }
+
+    auto pLfinish = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> pLelapsed = pLfinish - pLstart;
+    std::cout << "Building worklist: " << pLelapsed.count() << " s\n";
+
     std::mutex work_queue_mutex;
     std::mutex dp_mutex;
     std::vector<std::thread> threads;
+
+    pLstart = std::chrono::high_resolution_clock::now();
+
     for (int i = 0; i < num_thread; ++i)
     {
         threads.push_back(std::thread(&Linus::jsondiff::JsonDiffer::parallel_diff_level, this, std::ref(work_queue), std::ref(dp), std::ref(level), std::ref(work_queue_mutex), std::ref(dp_mutex)));
     }
+
+    pLfinish = std::chrono::high_resolution_clock::now();
+    pLelapsed = pLfinish - pLstart;
+    std::cout << "Allocating threads: " << pLelapsed.count() << " s\n";
+
     for (auto& thread : threads)
     {
         thread.join();
     }
+
+    pLfinish = std::chrono::high_resolution_clock::now();
+    pLelapsed = pLfinish - pLstart;
+    std::cout << "Parallel computing scores: " << pLelapsed.count() << " s\n";
+
     //output dp table
     /*std::cout << "Before reconstruction" << std::endl;
     for (unsigned int i = 0; i <= len_left; ++i)
@@ -202,6 +238,9 @@ std::map<unsigned int, unsigned int> Linus::jsondiff::JsonDiffer::parallel_LCS(L
         }
         std::cout << std::endl;
     }*/
+    
+    pLstart = std::chrono::high_resolution_clock::now();
+
     //reconstruct dp table according to the result of parallel computing
     for (unsigned int i = 1; i <= len_left; ++i)
     {
@@ -227,9 +266,17 @@ std::map<unsigned int, unsigned int> Linus::jsondiff::JsonDiffer::parallel_LCS(L
         }
         std::cout << std::endl;
     }*/
+    
+    pLfinish = std::chrono::high_resolution_clock::now();
+    pLelapsed = pLfinish - pLstart;
+    std::cout << "Reconstructing of dp table: " << pLelapsed.count() << " s\n";
+
     std::map<unsigned int, unsigned int> pair_list;
     unsigned int i = len_left;
     unsigned int j = len_right;
+
+    pLstart = std::chrono::high_resolution_clock::now();
+
     while (i > 0 && j > 0)
     {
         Linus::jsondiff::TreeLevel level_(level.left[i - 1], level.right[j - 1], level.left_path + "[" + std::to_string(i - 1) + "]", level.right_path + "[" + std::to_string(j - 1) + "]", level.left_path);
@@ -249,6 +296,11 @@ std::map<unsigned int, unsigned int> Linus::jsondiff::JsonDiffer::parallel_LCS(L
             --j;
         }
     }
+
+    pLfinish = std::chrono::high_resolution_clock::now();
+    pLelapsed = pLfinish - pLstart;
+    std::cout << "Retreiving LCS: " << pLelapsed.count() << " s\n";
+
     return pair_list;
 }
 
@@ -257,12 +309,15 @@ std::map<unsigned int, unsigned int> Linus::jsondiff::JsonDiffer::LCS(Linus::jso
     unsigned int len_left = level.left.Size();
     unsigned int len_right = level.right.Size();
     std::vector<std::vector<double>> dp(len_left + 1, std::vector<double>(len_right + 1, 0.0));
+
+    auto pLstart = std::chrono::high_resolution_clock::now();
+
     for (unsigned int i = 1; i <= len_left; ++i)
     {
         for (unsigned int j = 1; j <= len_right; ++j)
         {
             Linus::jsondiff::TreeLevel level_(level.left[i - 1], level.right[j - 1], level.left_path + "[" + std::to_string(i - 1) + "]", level.right_path + "[" + std::to_string(j - 1) + "]", level.left_path);
-            double score_ = diff_level(level_, true);
+            double score_ = _diff_level(level_, true);
             if (score_ > 0)
             {
                 dp[i][j] = dp[i - 1][j - 1] + score_;
@@ -273,6 +328,13 @@ std::map<unsigned int, unsigned int> Linus::jsondiff::JsonDiffer::LCS(Linus::jso
             }
         }
     }
+
+    auto pLfinish = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> pLelapsed = pLfinish - pLstart;
+    std::cout << "Single thread: computing dp table: " << pLelapsed.count() << " s\n";
+
+    pLstart = std::chrono::high_resolution_clock::now();
+
     std::map<unsigned int, unsigned int> pair_list;
     unsigned int i = len_left;
     unsigned int j = len_right;
@@ -295,6 +357,11 @@ std::map<unsigned int, unsigned int> Linus::jsondiff::JsonDiffer::LCS(Linus::jso
             --j;
         }
     }
+
+    pLfinish = std::chrono::high_resolution_clock::now();
+    pLelapsed = pLfinish - pLstart;
+    std::cout << "Retreive LCS: " << pLelapsed.count() << " s\n";
+
     return pair_list;
 }
 

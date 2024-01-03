@@ -1,4 +1,5 @@
 #include <rapidjson/document.h>
+#include <rapidjson/pointer.h>
 #include <rapidjson/writer.h>
 #include <rapidjson/stringbuffer.h>
 #include <vector>
@@ -37,14 +38,14 @@ namespace Linus
             public:
                 const rapidjson::Value& left;
                 const rapidjson::Value& right;
-                std::string left_path;
-                std::string right_path;
-                std::string up;
+                const std::string& left_path;
+                const std::string& right_path;
+                const std::string& up;
 
                 TreeLevel(const rapidjson::Value& left_input, const rapidjson::Value& right_input,\
-                 string path_left, string path_right, string up_level);
+                 const std::string& path_left, const std::string& path_right, const std::string& up_level);
 
-                std::string get_type();
+                int get_type();
                 std::string to_info();
                 std::string get_key();
         };
@@ -64,12 +65,16 @@ namespace Linus
                 std::map<std::string, std::vector<std::string>> to_info();
                 double compare_array(Linus::jsondiff::TreeLevel level, bool drill);
                 double compare_array_fast(Linus::jsondiff::TreeLevel level, bool drill);
+                int get_type(const rapidjson::Value& input);
                 void parallel_diff_level(std::queue<std::pair<unsigned int, unsigned int>>& work_queue, std::vector<std::vector<double>>& dp, Linus::jsondiff::TreeLevel& level, std::mutex& work_queue_mutex, std::mutex& dp_mutex);
                 std::map<unsigned int, unsigned int> parallel_LCS(Linus::jsondiff::TreeLevel level);
                 std::map<unsigned int, unsigned int> LCS(Linus::jsondiff::TreeLevel level);
                 double compare_array_advanced(Linus::jsondiff::TreeLevel level, bool drill);
                 double compare_object(Linus::jsondiff::TreeLevel level, bool drill);
-                double compare_primitive(Linus::jsondiff::TreeLevel level, bool drill);
+                double compare_Int(Linus::jsondiff::TreeLevel level, bool drill);
+                double compare_Double(Linus::jsondiff::TreeLevel level, bool drill);
+                double compare_String(Linus::jsondiff::TreeLevel level, bool drill);
+                double compare_Bool(Linus::jsondiff::TreeLevel level, bool drill);
                 double _diff_level(Linus::jsondiff::TreeLevel level, bool drill);
                 double diff_level(Linus::jsondiff::TreeLevel level, bool drill);
                 bool diff();

@@ -21,40 +21,44 @@ std::vector<std::string> Linus::jsondiff::KeysFromObject(const rapidjson::Value&
     return keys;
 }
 
-Linus::jsondiff::TreeLevel::TreeLevel(const rapidjson::Value& left_input, const rapidjson::Value& right_input, std::string path_left, std::string path_right, std::string up_level) : left(left_input), right(right_input), left_path(path_left), right_path(path_right), up(up_level)
+Linus::jsondiff::TreeLevel::TreeLevel(const rapidjson::Value& left_input, const rapidjson::Value& right_input, const std::string& path_left, const std::string& path_right, const std::string& up_level) : left(left_input), right(right_input), left_path(path_left), right_path(path_right), up(up_level)
 {
     
 }
 
-std::string Linus::jsondiff::TreeLevel::get_type()
+int Linus::jsondiff::TreeLevel::get_type()
 {
     if (left.IsObject() && right.IsObject())
     {
-        return "Object";
+        return 0;
     }
     else if (left.IsArray() && right.IsArray())
     {
-        return "Array";
+        return 1;
     }
     else if (left.IsString() && right.IsString())
     {
-        return "String";
+        return 2;
     }
-    else if (left.IsNumber() && right.IsNumber())
+    else if (left.IsInt() && right.IsInt())
     {
-        return "Number";
+        return 3;
+    }
+    else if (left.IsDouble() && right.IsDouble())
+    {
+        return 4;
     }
     else if (left.IsBool() && right.IsBool())
     {
-        return "Bool";
+        return 5;
     }
     else if (left.IsNull() && right.IsNull())
     {
-        return "Null";
+        return 6;
     }
     else
     {
-        return "TypeMismatch";
+        return 7;
     }
 }
 
@@ -144,6 +148,168 @@ double Linus::jsondiff::JsonDiffer::compare_array_fast(Linus::jsondiff::TreeLeve
     return total_score / max_len;
 }
 
+int Linus::jsondiff::JsonDiffer::get_type(const rapidjson::Value& input)
+{
+    if (input.IsObject())
+    {
+        return 0;
+    }
+    else if (input.IsArray())
+    {
+        return 1;
+    }
+    else if (input.IsString())
+    {
+        return 2;
+    }
+    else if (input.IsInt())
+    {
+        return 3;
+    }
+    else if (input.IsDouble())
+    {
+        return 4;
+    }
+    else if (input.IsBool())
+    {
+        return 5;
+    }
+    else
+    {
+        return 6;
+    }
+}
+
+/*void Linus::jsondiff::JsonDiffer::parallel_diff_level(std::queue<std::pair<unsigned int, unsigned int>>& work_queue, std::vector<std::vector<double>>& dp, Linus::jsondiff::TreeLevel& level, std::mutex& work_queue_mutex, std::mutex& dp_mutex)
+{
+    bool ctn = true;
+    int volumn = 6;
+    std::chrono::duration<double> work_queue_eplapsed(0);
+    //std::chrono::duration<double> tree_eplapsed(0);
+    std::chrono::duration<double> diff_eplapsed(0);
+    std::chrono::duration<double> dp_eplapsed(0);
+    while (ctn)
+    {
+        std::vector<std::pair<unsigned int, unsigned int>> task_list(volumn);
+        int count = 0;
+        {
+            auto lock_start = std::chrono::high_resolution_clock::now();
+            std::lock_guard<std::mutex> lock(work_queue_mutex);
+            for (int i = 0; i < volumn; ++i)
+            {
+                if (work_queue.empty())
+                {
+                    ctn = false;
+                    break;
+                }
+                task_list[i] = work_queue.front();
+                work_queue.pop();
+                ++count;
+            }
+            auto lock_finish = std::chrono::high_resolution_clock::now();
+            work_queue_eplapsed += (lock_finish - lock_start);
+            //std::cout << std::to_string(task.first) << ":" << std::to_string(task.second) << std::endl;
+        }
+        
+        std::vector<double> score_(volumn);
+        for (int i = 0; i < count; ++i)
+        {
+            //auto lock_start = std::chrono::high_resolution_clock::now();
+            //Linus::jsondiff::TreeLevel level_(level.left[task_list[i].first], level.right[task_list[i].second], level.left_path + "[" + std::to_string(task_list[i].first) + "]", level.right_path + "[" + std::to_string(task_list[i].second) + "]", level.left_path);
+            //auto lock_finish = std::chrono::high_resolution_clock::now();
+            //tree_eplapsed += (lock_finish - lock_start);
+            auto lock_start = std::chrono::high_resolution_clock::now();
+            score_[i] = (level.left[task_list[i].first].GetInt() == level.right[task_list[i].second].GetInt());
+            auto lock_finish = std::chrono::high_resolution_clock::now();
+            diff_eplapsed += (lock_finish - lock_start);
+        }
+        {
+            auto lock_start = std::chrono::high_resolution_clock::now();
+            std::lock_guard<std::mutex> lock(dp_mutex);
+            for (int i = 0; i < count; ++i)
+            {
+                dp[task_list[i].first + 1][task_list[i].second + 1] = score_[i];
+            }
+            auto lock_finish = std::chrono::high_resolution_clock::now();
+            dp_eplapsed += (lock_finish - lock_start);
+        }
+    }
+    {
+        std::lock_guard<std::mutex> lock(work_queue_mutex);
+        std::cout << "Thread: work_queue lock time: " << work_queue_eplapsed.count() << " s\n";
+        //std::cout << "Thread: tree time: " << tree_eplapsed.count() << " s\n";
+        std::cout << "Thread: diff time: " << diff_eplapsed.count() << " s\n";
+        std::cout << "Thread: dp_table lock time: " << dp_eplapsed.count() << " s\n";
+    }
+}*/
+
+/*void Linus::jsondiff::JsonDiffer::parallel_diff_level(std::queue<std::pair<unsigned int, unsigned int>>& work_queue, std::vector<std::vector<double>>& dp, Linus::jsondiff::TreeLevel& level, std::mutex& work_queue_mutex, std::mutex& dp_mutex)
+{
+    bool ctn = true;
+    int volumn = 6;
+    //std::chrono::duration<double> work_queue_eplapsed(0);
+    //std::chrono::duration<double> tree_eplapsed(0);
+    //std::chrono::duration<double> diff_eplapsed(0);
+    //std::chrono::duration<double> dp_eplapsed(0);
+    while (ctn)
+    {
+        std::vector<std::pair<unsigned int, unsigned int>> task_list(volumn);
+        int count = 0;
+        {
+            //auto lock_start = std::chrono::high_resolution_clock::now();
+            std::lock_guard<std::mutex> lock(work_queue_mutex);
+            for (int i = 0; i < volumn; ++i)
+            {
+                if (work_queue.empty())
+                {
+                    ctn = false;
+                    break;
+                }
+                task_list[i] = work_queue.front();
+                work_queue.pop();
+                ++count;
+            }
+            //auto lock_finish = std::chrono::high_resolution_clock::now();
+            //work_queue_eplapsed += (lock_finish - lock_start);
+            //std::cout << std::to_string(task.first) << ":" << std::to_string(task.second) << std::endl;
+        }
+        
+        std::vector<double> score_(volumn);
+        for (int i = 0; i < count; ++i)
+        {
+            //auto lock_start = std::chrono::high_resolution_clock::now();
+            //Linus::jsondiff::TreeLevel level_(level.left[task_list[i].first], level.right[task_list[i].second], level.left_path + "[" + std::to_string(task_list[i].first) + "]", level.right_path + "[" + std::to_string(task_list[i].second) + "]", level.left_path);
+            //auto lock_finish = std::chrono::high_resolution_clock::now();
+            //tree_eplapsed += (lock_finish - lock_start);
+            //auto lock_start = std::chrono::high_resolution_clock::now();
+            std::string leftPath = "/number/" + std::to_string(task_list[i].first);
+            std::string rightPath = "/number/" + std::to_string(task_list[i].second);
+            const rapidjson::Value* leftValue = rapidjson::Pointer(leftPath.c_str()).Get(left);
+            const rapidjson::Value* rightValue = rapidjson::Pointer(rightPath.c_str()).Get(right);
+            score_[i] = (leftValue->GetInt() == rightValue->GetInt());
+            //auto lock_finish = std::chrono::high_resolution_clock::now();
+            //diff_eplapsed += (lock_finish - lock_start);
+        }
+        {
+            //auto lock_start = std::chrono::high_resolution_clock::now();
+            std::lock_guard<std::mutex> lock(dp_mutex);
+            for (int i = 0; i < count; ++i)
+            {
+                dp[task_list[i].first + 1][task_list[i].second + 1] = score_[i];
+            }
+            //auto lock_finish = std::chrono::high_resolution_clock::now();
+            //dp_eplapsed += (lock_finish - lock_start);
+        }
+    }
+    {
+        std::lock_guard<std::mutex> lock(work_queue_mutex);
+        //std::cout << "Thread: work_queue lock time: " << work_queue_eplapsed.count() << " s\n";
+        //std::cout << "Thread: tree time: " << tree_eplapsed.count() << " s\n";
+        //std::cout << "Thread: diff time: " << diff_eplapsed.count() << " s\n";
+        //std::cout << "Thread: dp_table lock time: " << dp_eplapsed.count() << " s\n";
+    }
+}*/
+
 void Linus::jsondiff::JsonDiffer::parallel_diff_level(std::queue<std::pair<unsigned int, unsigned int>>& work_queue, std::vector<std::vector<double>>& dp, Linus::jsondiff::TreeLevel& level, std::mutex& work_queue_mutex, std::mutex& dp_mutex)
 {
     bool ctn = true;
@@ -167,11 +333,11 @@ void Linus::jsondiff::JsonDiffer::parallel_diff_level(std::queue<std::pair<unsig
             }
             //std::cout << std::to_string(task.first) << ":" << std::to_string(task.second) << std::endl;
         }
+        
         std::vector<double> score_(volumn);
         for (int i = 0; i < count; ++i)
         {
-            Linus::jsondiff::TreeLevel level_(level.left[task_list[i].first], level.right[task_list[i].second], level.left_path + "[" + std::to_string(task_list[i].first) + "]", level.right_path + "[" + std::to_string(task_list[i].second) + "]", level.left_path);
-            score_[i] = _diff_level(level_, true);
+            score_[i] = (level.left[task_list[i].first].GetInt() == level.right[task_list[i].second].GetInt());
         }
         {
             std::lock_guard<std::mutex> lock(dp_mutex);
@@ -187,10 +353,12 @@ std::map<unsigned int, unsigned int> Linus::jsondiff::JsonDiffer::parallel_LCS(L
 {
     unsigned int len_left = level.left.Size();
     unsigned int len_right = level.right.Size();
+    std::vector<int> type_left(len_left);
+    std::vector<int> type_right(len_right);
     std::vector<std::vector<double>> dp(len_left + 1, std::vector<double>(len_right + 1, 0.0));
     std::queue<std::pair<unsigned int, unsigned int>> work_queue;
 
-    //auto pLstart = std::chrono::high_resolution_clock::now();
+    auto pLstart = std::chrono::high_resolution_clock::now();
 
     for (unsigned int i = 0; i < len_left; ++i)
     {
@@ -200,33 +368,35 @@ std::map<unsigned int, unsigned int> Linus::jsondiff::JsonDiffer::parallel_LCS(L
         }
     }
 
-    //auto pLfinish = std::chrono::high_resolution_clock::now();
-    //std::chrono::duration<double> pLelapsed = pLfinish - pLstart;
-    //std::cout << "Building worklist: " << pLelapsed.count() << " s\n";
+    auto pLfinish = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> pLelapsed = pLfinish - pLstart;
+    std::cout << "Building worklist: " << pLelapsed.count() << " s\n";
 
     std::mutex work_queue_mutex;
     std::mutex dp_mutex;
     std::vector<std::thread> threads;
 
-    //pLstart = std::chrono::high_resolution_clock::now();
+    pLstart = std::chrono::high_resolution_clock::now();
 
     for (int i = 0; i < num_thread; ++i)
     {
         threads.push_back(std::thread(&Linus::jsondiff::JsonDiffer::parallel_diff_level, this, std::ref(work_queue), std::ref(dp), std::ref(level), std::ref(work_queue_mutex), std::ref(dp_mutex)));
     }
 
-    //pLfinish = std::chrono::high_resolution_clock::now();
-    //pLelapsed = pLfinish - pLstart;
-    //std::cout << "Allocating threads: " << pLelapsed.count() << " s\n";
+    pLfinish = std::chrono::high_resolution_clock::now();
+    pLelapsed = pLfinish - pLstart;
+    std::cout << "Allocating threads: " << pLelapsed.count() << " s\n";
+
+    pLstart = std::chrono::high_resolution_clock::now();
 
     for (auto& thread : threads)
     {
         thread.join();
     }
 
-    //pLfinish = std::chrono::high_resolution_clock::now();
-    //pLelapsed = pLfinish - pLstart;
-    //std::cout << "Parallel computing scores: " << pLelapsed.count() << " s\n";
+    pLfinish = std::chrono::high_resolution_clock::now();
+    pLelapsed = pLfinish - pLstart;
+    std::cout << "Parallel computing scores: " << pLelapsed.count() << " s\n";
 
     //output dp table
     /*std::cout << "Before reconstruction" << std::endl;
@@ -239,7 +409,7 @@ std::map<unsigned int, unsigned int> Linus::jsondiff::JsonDiffer::parallel_LCS(L
         std::cout << std::endl;
     }*/
     
-    //pLstart = std::chrono::high_resolution_clock::now();
+    pLstart = std::chrono::high_resolution_clock::now();
 
     //reconstruct dp table according to the result of parallel computing
     for (unsigned int i = 1; i <= len_left; ++i)
@@ -267,15 +437,15 @@ std::map<unsigned int, unsigned int> Linus::jsondiff::JsonDiffer::parallel_LCS(L
         std::cout << std::endl;
     }*/
     
-    //pLfinish = std::chrono::high_resolution_clock::now();
-    //pLelapsed = pLfinish - pLstart;
-    //std::cout << "Reconstructing of dp table: " << pLelapsed.count() << " s\n";
+    pLfinish = std::chrono::high_resolution_clock::now();
+    pLelapsed = pLfinish - pLstart;
+    std::cout << "Reconstructing of dp table: " << pLelapsed.count() << " s\n";
 
     std::map<unsigned int, unsigned int> pair_list;
     unsigned int i = len_left;
     unsigned int j = len_right;
 
-    //pLstart = std::chrono::high_resolution_clock::now();
+    pLstart = std::chrono::high_resolution_clock::now();
 
     while (i > 0 && j > 0)
     {
@@ -297,9 +467,9 @@ std::map<unsigned int, unsigned int> Linus::jsondiff::JsonDiffer::parallel_LCS(L
         }
     }
 
-    //pLfinish = std::chrono::high_resolution_clock::now();
-    //pLelapsed = pLfinish - pLstart;
-    //std::cout << "Retreiving LCS: " << pLelapsed.count() << " s\n";
+    pLfinish = std::chrono::high_resolution_clock::now();
+    pLelapsed = pLfinish - pLstart;
+    std::cout << "Retreiving LCS: " << pLelapsed.count() << " s\n";
 
     return pair_list;
 }
@@ -308,17 +478,101 @@ std::map<unsigned int, unsigned int> Linus::jsondiff::JsonDiffer::LCS(Linus::jso
 {
     unsigned int len_left = level.left.Size();
     unsigned int len_right = level.right.Size();
+    std::vector<int> type_left(len_left);
+    std::vector<int> type_right(len_right);
     std::vector<std::vector<double>> dp(len_left + 1, std::vector<double>(len_right + 1, 0.0));
 
-    //auto pLstart = std::chrono::high_resolution_clock::now();
+    auto pLstart = std::chrono::high_resolution_clock::now();
+    for (unsigned int i = 0; i < len_left; ++i)
+    {
+        type_left[i] =  Linus::jsondiff::JsonDiffer::get_type(level.left[i]);
+    }
+    for (unsigned int j = 0; j < len_right; ++j)
+    {
+        type_right[j] = Linus::jsondiff::JsonDiffer::get_type(level.right[j]);
+    }
+    auto pLfinish = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> pLelapsed = pLfinish - pLstart;
+    std::cout << "Single thread: Getting types of array elements: " << pLelapsed.count() << " s\n";
+    //std::chrono::duration<double> value_time(0);
+    //std::chrono::duration<double> path_time(0); 
+    //std::chrono::duration<double> tree_time(0);
+    //std::chrono::duration<double> compute_time(0);    
+    pLstart = std::chrono::high_resolution_clock::now();
 
     for (unsigned int i = 1; i <= len_left; ++i)
     {
         for (unsigned int j = 1; j <= len_right; ++j)
         {
-            Linus::jsondiff::TreeLevel level_(level.left[i - 1], level.right[j - 1], level.left_path + "[" + std::to_string(i - 1) + "]", level.right_path + "[" + std::to_string(j - 1) + "]", level.left_path);
-            double score_ = _diff_level(level_, true);
-            if (score_ > 0)
+            //auto compute_start = std::chrono::high_resolution_clock::now();
+            double score_;
+            if (type_left[i-1] == type_right[j-1])
+            {
+                switch (type_left[i-1])
+                {
+                    case 0:
+                    {
+                        Linus::jsondiff::TreeLevel level_(level.left[i - 1], level.right[j - 1], level.left_path + "[" + std::to_string(i - 1) + "]", level.right_path + "[" + std::to_string(j - 1) + "]", level.left_path);
+                        score_ = Linus::jsondiff::JsonDiffer::compare_object(level_, true);
+                        break;
+                    }
+                    case 1:
+                    {
+                        Linus::jsondiff::TreeLevel level_(level.left[i - 1], level.right[j - 1], level.left_path + "[" + std::to_string(i - 1) + "]", level.right_path + "[" + std::to_string(j - 1) + "]", level.left_path);
+                        score_ = Linus::jsondiff::JsonDiffer::compare_array(level_, true);
+                        break;
+                    }
+                    case 2:
+                        score_ = (level.left[i-1].GetString() == level.right[j-1].GetString());
+                        break;
+                    case 3:
+                        score_ = (level.left[i-1].GetInt() == level.right[j-1].GetInt());
+                        break;
+                    case 4:
+                        score_ = (level.left[i-1].GetDouble() == level.right[j-1].GetDouble());
+                        break;
+                    case 5:
+                        score_ = (level.left[i-1].GetBool() == level.right[j-1].GetBool());
+                        break;
+                    case 6:
+                        score_ = 1;
+                        break;
+                    default:
+                        score_ = 0;
+                        break;
+                }
+            }
+            else
+            {
+                score_ = 0;
+            }
+            //double score_ = (level.left[i-1].GetInt() == level.right[j-1].GetInt());
+            //auto compute_finish = std::chrono::high_resolution_clock::now();
+            //compute_time += (compute_finish - compute_start);
+            //auto start = std::chrono::high_resolution_clock::now();
+            //const rapidjson::Value& level_left = level.left[i - 1];
+            //const rapidjson::Value& level_right = level.right[j - 1];
+            //auto finish = std::chrono::high_resolution_clock::now();
+            //value_time += (finish - start);
+
+            //start = std::chrono::high_resolution_clock::now();
+            //std::string leftpath = level.left_path + "[" + std::to_string(i - 1) + "]";
+            //std::string rightpath = level.left_path + "[" + std::to_string(j - 1) + "]";
+            //finish = std::chrono::high_resolution_clock::now();
+            //path_time += (finish - start);
+
+            //start = std::chrono::high_resolution_clock::now();
+            //Linus::jsondiff::TreeLevel level_(level.left[i - 1], level.right[j - 1], level.left_path + "[" + std::to_string(i - 1) + "]", level.right_path + "[" + std::to_string(j - 1) + "]", level.left_path);
+            //Linus::jsondiff::TreeLevel level_(level_left, level_right, leftpath, rightpath, level.left_path);
+            //finish = std::chrono::high_resolution_clock::now();
+            //tree_time += (finish - start);
+
+            //start = std::chrono::high_resolution_clock::now();
+            //double score_ = _diff_level(level_, true);
+            //finish = std::chrono::high_resolution_clock::now();
+            //compute_time += (finish - start);
+
+            if (score_ > SIMILARITY_THRESHOLD)
             {
                 dp[i][j] = dp[i - 1][j - 1] + score_;
             }
@@ -328,20 +582,64 @@ std::map<unsigned int, unsigned int> Linus::jsondiff::JsonDiffer::LCS(Linus::jso
             }
         }
     }
+    //std::cout << "Single thread: copy rapidjson::Value&: " << value_time.count() << " s\n";
+    //std::cout << "Single thread: combine path std::string: " << path_time.count() << " s\n";
+    //std::cout << "Single thread: building TreeLevel time: " << tree_time.count() << " s\n";
+    //std::cout << "Single thread: computing time: " << compute_time.count() << " s\n";
+    pLfinish = std::chrono::high_resolution_clock::now();
+    pLelapsed = pLfinish - pLstart;
+    std::cout << "Single thread: computing dp table: " << pLelapsed.count() << " s\n";
 
-    //auto pLfinish = std::chrono::high_resolution_clock::now();
-    //std::chrono::duration<double> pLelapsed = pLfinish - pLstart;
-    //std::cout << "Single thread: computing dp table: " << pLelapsed.count() << " s\n";
-
-    //pLstart = std::chrono::high_resolution_clock::now();
+    pLstart = std::chrono::high_resolution_clock::now();
 
     std::map<unsigned int, unsigned int> pair_list;
     unsigned int i = len_left;
     unsigned int j = len_right;
     while (i > 0 && j > 0)
     {
-        Linus::jsondiff::TreeLevel level_(level.left[i - 1], level.right[j - 1], level.left_path + "[" + std::to_string(i - 1) + "]", level.right_path + "[" + std::to_string(j - 1) + "]", level.left_path);
-        double score_ = diff_level(level_, true);
+        double score_;
+        if (type_left[i-1] == type_right[j-1])
+        {
+            switch (type_left[i-1])
+            {
+                case 0:
+                {
+                    Linus::jsondiff::TreeLevel level_(level.left[i - 1], level.right[j - 1], level.left_path + "[" + std::to_string(i - 1) + "]", level.right_path + "[" + std::to_string(j - 1) + "]", level.left_path);
+                    score_ = Linus::jsondiff::JsonDiffer::compare_object(level_, true);
+                    break;
+                }
+                case 1:
+                {
+                    Linus::jsondiff::TreeLevel level_(level.left[i - 1], level.right[j - 1], level.left_path + "[" + std::to_string(i - 1) + "]", level.right_path + "[" + std::to_string(j - 1) + "]", level.left_path);
+                    score_ = Linus::jsondiff::JsonDiffer::compare_array(level_, true);
+                    break;
+                }
+                case 2:
+                    score_ = (level.left[i-1].GetString() == level.right[j-1].GetString());
+                    break;
+                case 3:
+                    score_ = (level.left[i-1].GetInt() == level.right[j-1].GetInt());
+                    break;
+                case 4:
+                    score_ = (level.left[i-1].GetDouble() == level.right[j-1].GetDouble());
+                    break;
+                case 5:
+                    score_ = (level.left[i-1].GetBool() == level.right[j-1].GetBool());
+                    break;
+                case 6:
+                    score_ = 1;
+                    break;
+                default:
+                    score_ = 0;
+                    break;
+            }
+        }
+        else
+        {
+            score_ = 0;
+        }
+        //Linus::jsondiff::TreeLevel level_(level.left[i - 1], level.right[j - 1], level.left_path + "[" + std::to_string(i - 1) + "]", level.right_path + "[" + std::to_string(j - 1) + "]", level.left_path);
+        //double score_ = _diff_level(level_, true);
         if (score_ > SIMILARITY_THRESHOLD)
         {
             pair_list[i - 1] = j - 1;
@@ -358,9 +656,9 @@ std::map<unsigned int, unsigned int> Linus::jsondiff::JsonDiffer::LCS(Linus::jso
         }
     }
 
-    //pLfinish = std::chrono::high_resolution_clock::now();
-    //pLelapsed = pLfinish - pLstart;
-    //std::cout << "Retreive LCS: " << pLelapsed.count() << " s\n";
+    pLfinish = std::chrono::high_resolution_clock::now();
+    pLelapsed = pLfinish - pLstart;
+    std::cout << "Retreive LCS: " << pLelapsed.count() << " s\n";
 
     return pair_list;
 }
@@ -474,9 +772,48 @@ double Linus::jsondiff::JsonDiffer::compare_object(Linus::jsondiff::TreeLevel le
     return score / all_keys.size();
 }
 
-double Linus::jsondiff::JsonDiffer::compare_primitive(Linus::jsondiff::TreeLevel level, bool drill)
+double Linus::jsondiff::JsonDiffer::compare_Int(Linus::jsondiff::TreeLevel level, bool drill)
 {
-    if (level.left != level.right)
+    if (level.left.GetInt() != level.right.GetInt())
+    {
+        if (!drill)
+        {
+            Linus::jsondiff::JsonDiffer::report(EVENT_VALUE_CHANGE, level);
+        }
+        return 0;
+    }
+    return 1;
+}
+
+double Linus::jsondiff::JsonDiffer::compare_Double(Linus::jsondiff::TreeLevel level, bool drill)
+{
+    if (level.left.GetDouble() != level.right.GetDouble())
+    {
+        if (!drill)
+        {
+            Linus::jsondiff::JsonDiffer::report(EVENT_VALUE_CHANGE, level);
+        }
+        return 0;
+    }
+    return 1;
+}
+
+double Linus::jsondiff::JsonDiffer::compare_String(Linus::jsondiff::TreeLevel level, bool drill)
+{
+    if (level.left.GetString() != level.right.GetString())
+    {
+        if (!drill)
+        {
+            Linus::jsondiff::JsonDiffer::report(EVENT_VALUE_CHANGE, level);
+        }
+        return 0;
+    }
+    return 1;
+}
+
+double Linus::jsondiff::JsonDiffer::compare_Bool(Linus::jsondiff::TreeLevel level, bool drill)
+{
+    if (level.left.GetBool() != level.right.GetBool())
     {
         if (!drill)
         {
@@ -489,22 +826,40 @@ double Linus::jsondiff::JsonDiffer::compare_primitive(Linus::jsondiff::TreeLevel
 
 double Linus::jsondiff::JsonDiffer::_diff_level(Linus::jsondiff::TreeLevel level, bool drill)
 {
-    std::string type = level.get_type();
-    if (type == "TypeMismatch")
+    int type = level.get_type();
+    switch (type)
     {
-        return Linus::jsondiff::JsonDiffer::compare_primitive(level, drill);
-    }
-    else if (type == "Object")
-    {
+    case 0:
         return Linus::jsondiff::JsonDiffer::compare_object(level, drill);
-    }
-    else if (type == "Array")
-    {
+        break;
+    case 1:
         return Linus::jsondiff::JsonDiffer::compare_array(level, drill);
-    }
-    else
-    {
-        return Linus::jsondiff::JsonDiffer::compare_primitive(level, drill);
+        break;
+    case 2:
+        return Linus::jsondiff::JsonDiffer::compare_String(level, drill);
+        break;
+    case 3:
+        return Linus::jsondiff::JsonDiffer::compare_Int(level, drill);
+        break;
+    case 4:
+        return Linus::jsondiff::JsonDiffer::compare_Double(level, drill);
+        break;
+    case 5:
+        return Linus::jsondiff::JsonDiffer::compare_Bool(level, drill);
+        break;
+    case 6:
+        return 1;
+        break;
+    case 7:
+        if (!drill)
+        {
+            Linus::jsondiff::JsonDiffer::report(EVENT_VALUE_CHANGE, level);
+        }
+        return 0;
+        break;
+    default:
+        return 0;
+        break;
     }
 }
 

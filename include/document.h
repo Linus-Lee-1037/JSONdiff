@@ -2,6 +2,7 @@
 #include <rapidjson/pointer.h>
 #include <rapidjson/writer.h>
 #include <rapidjson/stringbuffer.h>
+#include <oneTBB/include/tbb/concurrent_queue.h>
 #include <vector>
 #include <map>
 #include <iostream>
@@ -16,6 +17,8 @@
 #include <mutex>
 #include <queue>
 #include <chrono>
+#include <cmath>
+#include <cctype>
 using namespace rapidjson;
 using namespace std;
 
@@ -36,6 +39,7 @@ namespace Linus
         class TreeLevel
         {
             public:
+                static const std::string empty_string;
                 const rapidjson::Value& left;
                 const rapidjson::Value& right;
                 const std::string& left_path;
@@ -44,6 +48,7 @@ namespace Linus
 
                 TreeLevel(const rapidjson::Value& left_input, const rapidjson::Value& right_input,\
                  const std::string& path_left, const std::string& path_right, const std::string& up_level);
+                TreeLevel(const rapidjson::Value& left_input, const rapidjson::Value& right_input);
 
                 int get_type();
                 std::string to_info();
@@ -68,7 +73,10 @@ namespace Linus
                 int get_type(const rapidjson::Value& input);
                 void parallel_diff_level(std::queue<std::pair<unsigned int, unsigned int>>& work_queue, std::vector<std::vector<double>>& dp, Linus::jsondiff::TreeLevel& level, std::mutex& work_queue_mutex, std::mutex& dp_mutex);
                 std::map<unsigned int, unsigned int> parallel_LCS(Linus::jsondiff::TreeLevel level);
-                std::map<unsigned int, unsigned int> LCS(Linus::jsondiff::TreeLevel level);
+                std::map<unsigned int, unsigned int> LCS(Linus::jsondiff::TreeLevel level, bool drill);
+                std::vector<double> NWScore(bool reverse, Linus::jsondiff::TreeLevel level, bool drill, std::vector<int>& type_left, unsigned int sleft, unsigned int eleft, std::vector<int>& type_right, unsigned int sright, unsigned int eright);
+                std::map<unsigned int, unsigned int> Hirschberg(Linus::jsondiff::TreeLevel level, bool drill, std::vector<int>& type_left, unsigned int sleft, unsigned int eleft, std::vector<int>& type_right, unsigned int sright, unsigned int eright);
+                std::map<unsigned int, unsigned int> Hirschberg_starter(Linus::jsondiff::TreeLevel level);
                 double compare_array_advanced(Linus::jsondiff::TreeLevel level, bool drill);
                 double compare_object(Linus::jsondiff::TreeLevel level, bool drill);
                 double compare_Int(Linus::jsondiff::TreeLevel level, bool drill);
@@ -78,6 +86,24 @@ namespace Linus
                 double _diff_level(Linus::jsondiff::TreeLevel level, bool drill);
                 double diff_level(Linus::jsondiff::TreeLevel level, bool drill);
                 bool diff();
+        };
+        class BottomUpLCS
+        {
+            public:
+                Linus::jsondiff::JsonDiffer& jsondiffer;
+                static const std::string empty_string;
+                std::map<unsigned int, std::vector<std::string>> left_nested_array;
+                std::map<unsigned int, std::vector<std::string>> right_nested_array;
+                std::map<std::string, double> history;
+                Linus::jsondiff::TreeLevel level;
+                BottomUpLCS(Linus::jsondiff::TreeLevel level_, Linus::jsondiff::JsonDiffer& differ);
+                int get_type(const rapidjson::Value& input);
+                void locate_array(const rapidjson::Value& tree, const std::string& path, unsigned int layer, bool lr);
+                bool isUInt(const std::string& s);
+                bool path_same(const std::string& left_path, const std::string& right_path);
+                std::map<unsigned int, unsigned int> bu_computing();
+                void LCS(const std::string& left_path, const std::string& right_path);
+                double object_compare(Linus::jsondiff::TreeLevel level_, const std::string& left_path, const std::string& right_path);
         };
     }
 }

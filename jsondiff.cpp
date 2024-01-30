@@ -3,9 +3,13 @@
 rapidjson::Document loadjson(std::string json)
 {
     rapidjson::Document document;
-    if (json[0] == '{')
+    if (json[0] == '{' or json[0] == '[')
     {
+        auto start = std::chrono::high_resolution_clock::now();
         document.Parse(json.c_str());
+        auto finish = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> elapsed = finish - start;
+        std::cout << "Parsing time: " << elapsed.count() << " s\n";
     }
     else
     {
@@ -18,26 +22,34 @@ rapidjson::Document loadjson(std::string json)
         std::stringstream buffer;
         buffer << file.rdbuf();
         file.close();
+        auto start = std::chrono::high_resolution_clock::now();
         document.Parse(buffer.str().c_str());
+        auto finish = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> elapsed = finish - start;
+        std::cout << "Parsing time: " << elapsed.count() << " s\n";
+        buffer.clear();
     }
     return document;
 }
 
 void PrintRecords(std::map<std::string, std::vector<std::string>> records)
 {
+    std::ostringstream result;
     for (const auto& pair : records)
     {
         for (const auto& val : pair.second)
         {
-            std::cout << pair.first << ": " << val << std::endl;
+            result << pair.first << ": " << val << "\n";
         }
     }
+    std::cout << result.str() << std::endl;
 }
 
 void run(std::string left, std::string right, bool advanced_mode, double similarity_threshold, int thread_count)
 {
     try 
     {
+
         rapidjson::Document left_json_ = loadjson(left);
         rapidjson::Document right_json_ = loadjson(right);
         const rapidjson::Value& left_json = left_json_;
@@ -56,7 +68,7 @@ void run(std::string left, std::string right, bool advanced_mode, double similar
     }
 }
 
-int main(int argc, char * argv[])
+/*int main(int argc, char * argv[])
 {
     auto start = std::chrono::high_resolution_clock::now();
     
@@ -117,15 +129,15 @@ int main(int argc, char * argv[])
     std::chrono::duration<double> elapsed = finish - start;
     std::cout << "Total time: " << elapsed.count() << " s\n";
     return 0;
-}
+}*/
 
 
-/*int main ()
+int main ()
 {
     //std::string json1 = "{\"number\":[1,2,3,4,5]}";
     //std::string json2 = "{\"number\":[1,2,4,5]}";
-    std::string json1 = ".\\left2.json";
-    std::string json2 = ".\\right2.json";
-    run(json1, json2, true, 0.5, 6);
+    std::string json1 = ".\\large-file-left.json";
+    std::string json2 = ".\\large-file-right.json";
+    run(json1, json2, true, 0.5, 1);
     return 0;
-}*/
+}

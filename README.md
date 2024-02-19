@@ -59,5 +59,14 @@ For left.json and right.json, result.txt is running under the default-fast mode 
 For left1.json and right1.json, result1.txt is running under the default-fast mode and result2.txt is running under the advanced mode using the default similarity threshold.
 ![examples](https://github.com/Linus-Lee-1037/JSONdiff/blob/main/figure/fd99d60ec6f7f70f66ed2c7e41cc05f.png)
 For large-file-left.json and large-file-right.json with the size of 25 MB, the program took 77 MB and finished in 8 minutes.
-
 ![examples](https://github.com/Linus-Lee-1037/JSONdiff/blob/main/figure/Large-file-result.png)
+
+## Compilation
+This work is based on a x86_64 Windows system. To compile it, you'd best install [rapidjson](https://rapidjson.org/) first. Then refer the following shell commandline code:
+```bash
+g++.exe -fdiagnostics-color=always -Ofast "path\to\JsonDiff\jsondiff.cpp" "path\to\JsonDiff\src\*.cpp" -o "path\to\jsondiff.exe" "-Ipath\to\JsonDiff\include" "-Ipath\to\rapidjson\include"
+```
+
+## Use
+
+

@@ -40,7 +40,7 @@ function LCS(level):
         level_ = create TreeLevel object with left[i-1], right[j-1], and paths
         score_ = diff_level(level_, true)
         
-        if score_ > SIMILARITY_THRESHOLD:
+        if score_ >= SIMILARITY_THRESHOLD:
             pair_list[i-1] = j-1
             i = i - 1
             j = j - 1
@@ -51,6 +51,9 @@ function LCS(level):
 
     return pair_list
 ```
+
+For Hirscheberg's algorithm, I referred to [Hirschberg's algorithm](https://en.wikipedia.org/wiki/Hirschberg%27s_algorithm).
+
 ## Examples
 For left.json and right.json, result.txt is running under the default-fast mode and result0.txt is running under the advanced mode using the default similarity threshold.
 For left1.json and right1.json, result1.txt is running under the default-fast mode and result2.txt is running under the advanced mode using the default similarity threshold.

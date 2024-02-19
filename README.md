@@ -68,5 +68,9 @@ g++.exe -fdiagnostics-color=always -Ofast "path\to\JsonDiff\jsondiff.cpp" "path\
 ```
 
 ## Use
+-left "path\to\json\file": input left json or json file.
+-right "path\to\json\file": input right json or json file.
+-advanced or -A: enable the advanced mode.
+-hirscheberg or -H: enable the Hirscheberg algorithm (hint: you must enbale the advanced mode first).
 
 

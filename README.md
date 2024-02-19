@@ -9,6 +9,7 @@ This package is designed for analyzing differences between JSON files. I have ut
 - **Array:** There are two modes for analyzing array differences:
   - **Fast mode (default):** Arrays are compared strictly based on indices. Differences in longer arrays are reported as "array:remove" or "array:add".
   - **Advanced mode:** Uses the Longest Common Subsequence (LCS) algorithm for best array index pairs comparison. Differences are reported based on internal element comparison.
+  - **Hirscheberg's algorithm:** Hirscheberg's algorithm can reduce memory consumption from 1,060 MB to 77 MB for the comparasion of two JSON files with the size of 25 MB.
 
 ## Algorithm
 In advanced mode for array comparison, the LCS algorithm is used with a user-defined or default similarity threshold (0.5). The pseudo code for the LCS implementation is as follows:
@@ -54,3 +55,4 @@ function LCS(level):
 For left.json and right.json, result.txt is running under the default-fast mode and result0.txt is running under the advanced mode using the default similarity threshold.
 For left1.json and right1.json, result1.txt is running under the default-fast mode and result2.txt is running under the advanced mode using the default similarity threshold.
 ![examples](https://github.com/Linus-Lee-1037/JSONdiff/blob/main/figure/fd99d60ec6f7f70f66ed2c7e41cc05f.png)
+For large-file-left.json and large-file-right.json with the size of 25 MB, the program takes 77 MB and finished in 8 minutes.

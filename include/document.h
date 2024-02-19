@@ -5,6 +5,7 @@
 #include <oneTBB/include/tbb/concurrent_queue.h>
 #include <vector>
 #include <map>
+#include <memory>
 #include <iostream>
 #include <string>
 #include <fstream>
@@ -63,9 +64,10 @@ namespace Linus
                 std::map<std::string, double> cache;
                 std::map<std::string, std::vector<std::string>> records;
                 bool advanced_mode;
+                bool hirscheburg;
                 int num_thread;
                 std::mutex cache_mutex;
-                JsonDiffer(const rapidjson::Value& left_input, const rapidjson::Value& right_input, bool advanced, double similarity_threshold, int thread_count);
+                JsonDiffer(const rapidjson::Value& left_input, const rapidjson::Value& right_input, bool advanced, bool hirscheburg, double similarity_threshold, int thread_count);
                 void report(std::string event, Linus::jsondiff::TreeLevel level);
                 std::map<std::string, std::vector<std::string>> to_info();
                 double compare_array(Linus::jsondiff::TreeLevel level, bool drill);
@@ -74,6 +76,8 @@ namespace Linus
                 void parallel_diff_level(std::queue<std::pair<unsigned int, unsigned int>>& work_queue, std::vector<std::vector<double>>& dp, Linus::jsondiff::TreeLevel& level, std::mutex& work_queue_mutex, std::mutex& dp_mutex);
                 std::map<unsigned int, unsigned int> parallel_LCS(Linus::jsondiff::TreeLevel level);
                 std::map<unsigned int, unsigned int> LCS(Linus::jsondiff::TreeLevel level, bool drill);
+                double drill_LCS(const rapidjson::Value& left, const rapidjson::Value& right);
+                double drill_obj(const rapidjson::Value& left, const rapidjson::Value& right);
                 std::vector<double> NWScore(bool reverse, Linus::jsondiff::TreeLevel level, bool drill, std::vector<int>& type_left, unsigned int sleft, unsigned int eleft, std::vector<int>& type_right, unsigned int sright, unsigned int eright);
                 std::map<unsigned int, unsigned int> Hirschberg(Linus::jsondiff::TreeLevel level, bool drill, std::vector<int>& type_left, unsigned int sleft, unsigned int eleft, std::vector<int>& type_right, unsigned int sright, unsigned int eright);
                 std::map<unsigned int, unsigned int> Hirschberg_starter(Linus::jsondiff::TreeLevel level);
@@ -90,20 +94,18 @@ namespace Linus
         class BottomUpLCS
         {
             public:
-                Linus::jsondiff::JsonDiffer& jsondiffer;
-                static const std::string empty_string;
-                std::map<unsigned int, std::vector<std::string>> left_nested_array;
-                std::map<unsigned int, std::vector<std::string>> right_nested_array;
-                std::map<std::string, double> history;
-                Linus::jsondiff::TreeLevel level;
-                BottomUpLCS(Linus::jsondiff::TreeLevel level_, Linus::jsondiff::JsonDiffer& differ);
-                int get_type(const rapidjson::Value& input);
-                void locate_array(const rapidjson::Value& tree, const std::string& path, unsigned int layer, bool lr);
-                bool isUInt(const std::string& s);
-                bool path_same(const std::string& left_path, const std::string& right_path);
-                std::map<unsigned int, unsigned int> bu_computing();
-                void LCS(const std::string& left_path, const std::string& right_path);
-                double object_compare(Linus::jsondiff::TreeLevel level_, const std::string& left_path, const std::string& right_path);
+                Linus::jsondiff::JsonDiffer& differ;
+                Linus::jsondiff::TreeLevel& level;
+                std::map<unsigned int, std::vector<const rapidjson::Value*>> left_array;
+                std::map<unsigned int, std::vector<const rapidjson::Value*>> right_array;
+                std::map<unsigned int, std::map<const rapidjson::Value* ,std::map<const rapidjson::Value*, double>>> history;
+                BottomUpLCS(Linus::jsondiff::TreeLevel& level, Linus::jsondiff::JsonDiffer& differ);
+                void locate_left_array(const rapidjson::Value& tree, unsigned int layer);
+                void locate_right_array(const rapidjson::Value& tree, unsigned int layer);
+                void bu_computing();
+                void inter_LCS(const rapidjson::Value* ptr_left, const rapidjson::Value* ptr_right, unsigned int layer);
+                double compare_object(const rapidjson::Value& left, const rapidjson::Value& right, unsigned int layer);
+                std::map<unsigned int, unsigned int> LCS();
         };
     }
 }

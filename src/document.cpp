@@ -4,7 +4,6 @@ using namespace Linus::jsondiff;
 using namespace rapidjson;
 
 const std::string Linus::jsondiff::TreeLevel::empty_string = "";
-const std::string BottomUpLCS::empty_string = "";
 
 std::string Linus::jsondiff::ValueToString(const rapidjson::Value& value)
 {
@@ -87,7 +86,7 @@ std::string Linus::jsondiff::TreeLevel::get_key()
     return key.str();
 }
 
-Linus::jsondiff::JsonDiffer::JsonDiffer(const rapidjson::Value& left_input, const rapidjson::Value& right_input, bool advanced, double similarity_threshold, int thread_count) :left(left_input), right(right_input), advanced_mode(advanced), SIMILARITY_THRESHOLD(similarity_threshold), num_thread(thread_count)
+Linus::jsondiff::JsonDiffer::JsonDiffer(const rapidjson::Value& left_input, const rapidjson::Value& right_input, bool advanced, bool hirscheburg, double similarity_threshold, int thread_count) :left(left_input), right(right_input), advanced_mode(advanced), hirscheburg(hirscheburg), SIMILARITY_THRESHOLD(similarity_threshold), num_thread(thread_count)
 {
 
 }
@@ -342,7 +341,7 @@ std::map<unsigned int, unsigned int> Linus::jsondiff::JsonDiffer::parallel_LCS(L
     {
         Linus::jsondiff::TreeLevel level_(level.left[i - 1], level.right[j - 1], level.left_path + "[" + std::to_string(i - 1) + "]", level.right_path + "[" + std::to_string(j - 1) + "]", level.left_path);
         double score_ = _diff_level(level_, true);
-        if (score_ > SIMILARITY_THRESHOLD)
+        if (score_ >= SIMILARITY_THRESHOLD)
         {
             pair_list[i - 1] = j - 1;
             --i;
@@ -401,18 +400,16 @@ std::map<unsigned int, unsigned int> Linus::jsondiff::JsonDiffer::LCS(Linus::jso
                 {
                     case 0:
                     {
-                        Linus::jsondiff::TreeLevel level_(level.left[i - 1], level.right[j - 1]);
-                        score_ = Linus::jsondiff::JsonDiffer::compare_object(level_, true);
+                        score_ = Linus::jsondiff::JsonDiffer::drill_obj(level.left[i-1], level.right[j-1]);
                         break;
                     }
                     case 1:
                     {
-                        Linus::jsondiff::TreeLevel level_(level.left[i - 1], level.right[j - 1]);
-                        score_ = Linus::jsondiff::JsonDiffer::compare_array(level_, true);
+                        score_ = Linus::jsondiff::JsonDiffer::drill_LCS(level.left[i-1], level.right[j-1]);
                         break;
                     }
                     case 2:
-                        score_ = (std::strcmp(level.left[i-1].GetString(), level.right[i-1].GetString()));
+                        score_ = (std::strcmp(level.left[i-1].GetString(), level.right[j-1].GetString()) == 0) ? 1 : 0;
                         break;
                     case 3:
                         score_ = (level.left[i-1].GetInt() == level.right[j-1].GetInt());
@@ -435,7 +432,7 @@ std::map<unsigned int, unsigned int> Linus::jsondiff::JsonDiffer::LCS(Linus::jso
             {
                 score_ = 0;
             }
-            if (score_ > SIMILARITY_THRESHOLD)
+            if (score_ >= SIMILARITY_THRESHOLD)
             {
                 dp[i][j] = dp[i - 1][j - 1] + score_;
             }
@@ -451,7 +448,7 @@ std::map<unsigned int, unsigned int> Linus::jsondiff::JsonDiffer::LCS(Linus::jso
     //if(!drill)    std::cout << "LCS: computing dp table: " << getting_types.count() << std::endl;
 
     //Lstart = std::chrono::high_resolution_clock::now();
-
+    //std::cout << "Tace back" << std::endl;
     std::map<unsigned int, unsigned int> pair_list;
     unsigned int i = len_left;
     unsigned int j = len_right;
@@ -464,18 +461,16 @@ std::map<unsigned int, unsigned int> Linus::jsondiff::JsonDiffer::LCS(Linus::jso
             {
                 case 0:
                 {
-                    Linus::jsondiff::TreeLevel level_(level.left[i - 1], level.right[j - 1]);
-                    score_ = Linus::jsondiff::JsonDiffer::compare_object(level_, true);
+                    score_ = Linus::jsondiff::JsonDiffer::drill_obj(level.left[i-1], level.right[j-1]);
                     break;
                 }
                 case 1:
                 {
-                    Linus::jsondiff::TreeLevel level_(level.left[i - 1], level.right[j - 1]);
-                    score_ = Linus::jsondiff::JsonDiffer::compare_array(level_, true);
+                    score_ = Linus::jsondiff::JsonDiffer::drill_LCS(level.left[i-1], level.right[j-1]);
                     break;
                 }
                 case 2:
-                    score_ = (std::strcmp(level.left[i - 1].GetString(), level.right[j - 1].GetString()));
+                    score_ = (std::strcmp(level.left[i - 1].GetString(), level.right[j - 1].GetString()) == 0) ? 1 : 0;
                     break;
                 case 3:
                     score_ = (level.left[i - 1].GetInt() == level.right[j - 1].GetInt());
@@ -498,7 +493,8 @@ std::map<unsigned int, unsigned int> Linus::jsondiff::JsonDiffer::LCS(Linus::jso
         {
             score_ = 0;
         }
-        if (score_ > SIMILARITY_THRESHOLD)
+        if (score_ >= SIMILARITY_THRESHOLD)
+        //if ((dp[i][j] - dp[i-1][j-1]) >= SIMILARITY_THRESHOLD && (dp[i][j] - dp[i-1][j-1]) < 1)
         {
             pair_list[i - 1] = j - 1;
             --i;
@@ -521,11 +517,147 @@ std::map<unsigned int, unsigned int> Linus::jsondiff::JsonDiffer::LCS(Linus::jso
     return pair_list;
 }
 
+double Linus::jsondiff::JsonDiffer::drill_LCS(const rapidjson::Value& left, const rapidjson::Value& right)
+{
+    unsigned int len_left = left.Size();
+    unsigned int len_right = right.Size();
+    std::vector<int> type_left(len_left);
+    std::vector<int> type_right(len_right);
+    if (len_left == 0 && len_right == 0) return 1.0;
+    if (len_left == 0 || len_right == 0) return 0.0;
+    std::vector<std::vector<double>> dp(len_left + 1, std::vector<double>(len_right + 1, 0.0));
+
+    for (unsigned int i = 0; i < len_left; ++i)
+    {
+        type_left[i] =  Linus::jsondiff::JsonDiffer::get_type(left[i]);
+    }
+    for (unsigned int j = 0; j < len_right; ++j)
+    {
+        type_right[j] = Linus::jsondiff::JsonDiffer::get_type(right[j]);
+    }
+    
+    for (unsigned int i = 1; i <= len_left; ++i)
+    {
+        for (unsigned int j = 1; j <= len_right; ++j)
+        {
+            double score_;
+            if (type_left[i-1] == type_right[j-1])
+            {
+                switch (type_left[i-1])
+                {
+                    case 0:
+                    {
+                        score_ = Linus::jsondiff::JsonDiffer::drill_obj(left[i-1], right[j-1]);
+                        break;
+                    }
+                    case 1:
+                    {
+                        score_ = Linus::jsondiff::JsonDiffer::drill_LCS(left[i-1], right[j-1]);
+                        break;
+                    }
+                    case 2:
+                        score_ = (std::strcmp(left[i-1].GetString(), right[j-1].GetString()) == 0) ? 1 : 0;
+                        break;
+                    case 3:
+                        score_ = (left[i-1].GetInt() == right[j-1].GetInt());
+                        break;
+                    case 4:
+                        score_ = (left[i-1].GetDouble() == right[j-1].GetDouble());
+                        break;
+                    case 5:
+                        score_ = (left[i-1].GetBool() == right[j-1].GetBool());
+                        break;
+                    case 6:
+                        score_ = 1;
+                        break;
+                    default:
+                        score_ = 0;
+                        break;
+                }
+            }
+            else
+            {
+                score_ = 0;
+            }
+            if (score_ >= SIMILARITY_THRESHOLD)
+            {
+                dp[i][j] = dp[i - 1][j - 1] + score_;
+            }
+            else
+            {
+                dp[i][j] = std::max(dp[i - 1][j], dp[i][j - 1]);
+            }
+        }
+    }
+    return dp[len_left][len_right] / max(len_left, len_right);
+}
+
+double Linus::jsondiff::JsonDiffer::drill_obj(const rapidjson::Value& left, const rapidjson::Value& right)
+{
+    if (left.ObjectEmpty() && right.ObjectEmpty()) return 1.0;
+    if (left.ObjectEmpty() || right.ObjectEmpty()) return 0.0;
+    double score = 0;
+    unsigned int count = 0;
+    for (auto iter = left.MemberBegin(); iter != left.MemberEnd(); ++iter)
+    {
+        const char* key = iter->name.GetString();
+        if (right.HasMember(key))
+        {
+            ++count;
+            double score_;
+            int type_left = Linus::jsondiff::JsonDiffer::get_type(iter->value);
+            int type_right = Linus::jsondiff::JsonDiffer::get_type(right[key]);
+            if (type_left == type_right)
+            {
+                switch (type_left)
+                {
+                    case 0:
+                    {
+                        score_ = Linus::jsondiff::JsonDiffer::drill_obj(iter->value, right[key]);
+                        break;
+                    }
+                    case 1:
+                    {
+                        score_ = Linus::jsondiff::JsonDiffer::drill_LCS(iter->value, right[key]);
+                        break;
+                    }
+                    case 2:
+                        score_ = (std::strcmp(iter->value.GetString(), right[key].GetString()) == 0) ? 1 : 0;
+                        break;
+                    case 3:
+                        score_ = (iter->value.GetInt() == right[key].GetInt());
+                        break;
+                    case 4:
+                        score_ = (iter->value.GetDouble() == right[key].GetDouble());
+                        break;
+                    case 5:
+                        score_ = (iter->value.GetBool() == right[key].GetBool());
+                        break;
+                    case 6:
+                        score_ = 1;
+                        break;
+                    default:
+                        score_ = 0;
+                        break;
+                }
+            }
+            else
+            {
+                score_ = 0;
+            }
+            score += score_;
+        }
+    }
+    return score / (left.MemberCount() + right.MemberCount() - count);
+}
+
 std::vector<double> Linus::jsondiff::JsonDiffer::NWScore(bool reverse, Linus::jsondiff::TreeLevel level, bool drill, std::vector<int>& type_left, unsigned int sleft, unsigned int eleft, std::vector<int>& type_right, unsigned int sright, unsigned int eright)
 {
+    //if (reverse) std::cout << "Reverse ";
+    //std::cout << "NWScore sleft " << sleft << " eleft " << eleft << " sright " << sright << " eright " << eright << std::endl;
     unsigned int len_left = eleft - sleft;
     unsigned int len_right = eright - sright;
-    std::vector<std::vector<double>> dp(2, std::vector<double>(len_right + 1, 0));
+    std::vector<std::vector<double>> dp(2, std::vector<double>(len_right + 2, 0));
     dp[0][0] = 0;
     for (int j = 1; j <= len_right; ++j)
     {
@@ -538,6 +670,7 @@ std::vector<double> Linus::jsondiff::JsonDiffer::NWScore(bool reverse, Linus::js
             dp[1][0] = dp[0][0];
             for (int j = 1; j <= len_right; ++j)
             {
+                //std::cout << "left index " << eleft-i << " right " << eright-j << std::endl;
                 double score_;
                 if (type_left[eleft - i] == type_right[eright - j])
                 {
@@ -545,27 +678,29 @@ std::vector<double> Linus::jsondiff::JsonDiffer::NWScore(bool reverse, Linus::js
                     {
                         case 0:
                         {
-                            Linus::jsondiff::TreeLevel level_(level.left[eleft - i], level.right[eright - j]);
-                            score_ = Linus::jsondiff::JsonDiffer::compare_object(level_, true);
+                            //Linus::jsondiff::TreeLevel level_(level.left[eleft - i], level.right[eright - j]);
+                            //score_ = Linus::jsondiff::JsonDiffer::compare_object(level_, true);
+                            score_ = Linus::jsondiff::JsonDiffer::drill_obj(level.left[eleft-i], level.right[eright-j]);
                             break;
                         }
                         case 1:
                         {
-                            Linus::jsondiff::TreeLevel level_(level.left[eleft - i], level.right[eright - j]);
-                            score_ = Linus::jsondiff::JsonDiffer::compare_array(level_, true);
+                            //Linus::jsondiff::TreeLevel level_(level.left[eleft - i], level.right[eright - j]);
+                            //score_ = Linus::jsondiff::JsonDiffer::compare_array(level_, true);
+                            score_ = Linus::jsondiff::JsonDiffer::drill_LCS(level.left[eleft-i], level.right[eright-j]);
                             break;
                         }
                         case 2:
-                            score_ = (std::strcmp(level.left[eleft - i].GetString(), level.right[eright - j].GetString()));
+                            score_ = (std::strcmp(level.left[eleft-i].GetString(), level.right[eright-j].GetString()));
                             break;
                         case 3:
-                            score_ = (level.left[eleft - i].GetInt() == level.right[eright - j].GetInt());
+                            score_ = (level.left[eleft-i].GetInt() == level.right[eright-j].GetInt());
                             break;
                         case 4:
-                            score_ = (level.left[eleft - i].GetDouble() == level.right[eright - j].GetDouble());
+                            score_ = (level.left[eleft-i].GetDouble() == level.right[eright-j].GetDouble());
                             break;
                         case 5:
-                            score_ = (level.left[eleft - i].GetBool() == level.right[eright - j].GetBool());
+                            score_ = (level.left[eleft-i].GetBool() == level.right[eright-j].GetBool());
                             break;
                         case 6:
                             score_ = 1;
@@ -599,27 +734,29 @@ std::vector<double> Linus::jsondiff::JsonDiffer::NWScore(bool reverse, Linus::js
                         case 0:
                         {
                             //Linus::jsondiff::TreeLevel level_(level.left[sleft + i - 1], level.right[sright + j - 1]);
-                            Linus::jsondiff::TreeLevel level_(level.left[1], level.right[23]);
-                            score_ = Linus::jsondiff::JsonDiffer::compare_object(level_, true);
+                            //Linus::jsondiff::TreeLevel level_(level.left[1], level.right[23]);
+                            //score_ = Linus::jsondiff::JsonDiffer::compare_object(level_, true);
+                            score_ = Linus::jsondiff::JsonDiffer::drill_obj(level.left[sleft+i-1], level.right[sright+j-1]);
                             break;
                         }
                         case 1:
                         {
-                            Linus::jsondiff::TreeLevel level_(level.left[sleft + i - 1], level.right[sright + j - 1]);
-                            score_ = Linus::jsondiff::JsonDiffer::compare_array(level_, true);
+                            //Linus::jsondiff::TreeLevel level_(level.left[sleft + i - 1], level.right[sright + j - 1]);
+                            //score_ = Linus::jsondiff::JsonDiffer::compare_array(level_, true);
+                            score_ = Linus::jsondiff::JsonDiffer::drill_LCS(level.left[sleft+i-1], level.right[sright+j-1]);
                             break;
                         }
                         case 2:
-                            score_ = (std::strcmp(level.left[sleft + i - 1].GetString(), level.right[sright + j - 1].GetString()));
+                            score_ = (std::strcmp(level.left[sleft+i-1].GetString(), level.right[sright+j-1].GetString()) == 0);
                             break;
                         case 3:
-                            score_ = (level.left[sleft + i - 1].GetInt() == level.right[sright + j - 1].GetInt());
+                            score_ = (level.left[sleft+i-1].GetInt() == level.right[sright+j-1].GetInt());
                             break;
                         case 4:
-                            score_ = (level.left[sleft + i - 1].GetDouble() == level.right[sright + j - 1].GetDouble());
+                            score_ = (level.left[sleft+i-1].GetDouble() == level.right[sright+j-1].GetDouble());
                             break;
                         case 5:
-                            score_ = (level.left[sleft + i - 1].GetBool() == level.right[sright + j - 1].GetBool());
+                            score_ = (level.left[sleft+i-1].GetBool() == level.right[sright+j-1].GetBool());
                             break;
                         case 6:
                             score_ = 1;
@@ -643,12 +780,16 @@ std::vector<double> Linus::jsondiff::JsonDiffer::NWScore(bool reverse, Linus::js
 
 std::map<unsigned int, unsigned int> Linus::jsondiff::JsonDiffer::Hirschberg(Linus::jsondiff::TreeLevel level, bool drill, std::vector<int>& type_left, unsigned int sleft, unsigned int eleft, std::vector<int>& type_right, unsigned int sright, unsigned int eright)
 {
-    //std::cout << "sleft " << sleft << " eleft " << eleft << " sright " << sright << " eright " << eright << std::endl;
-    unsigned int len_left = eleft - sleft;
+    //std::cout << "Hirschberg sleft " << sleft << " eleft " << eleft << " sright " << sright << " eright " << eright << std::endl;
+    unsigned int len_left = eleft - sleft + 1;
     //std::cout << "len_left " << len_left << std::endl;
-    unsigned int len_right = eright - sright;
+    unsigned int len_right = eright - sright + 1;
     std::map<unsigned int, unsigned int> pair_list;
     /*directly report here*/
+    if (len_left == 0 || len_right == 0)
+    {
+        return pair_list;
+    }
     if (len_left == 1 || len_right == 1)/////////////////////////////////////////////////////////
     {
         double score_;
@@ -658,18 +799,20 @@ std::map<unsigned int, unsigned int> Linus::jsondiff::JsonDiffer::Hirschberg(Lin
             {
                 case 0:
                 {
-                    Linus::jsondiff::TreeLevel level_(level.left[sleft], level.right[sright]);
-                    score_ = Linus::jsondiff::JsonDiffer::compare_object(level_, true);
+                    //Linus::jsondiff::TreeLevel level_(level.left[sleft], level.right[sright]);
+                    //score_ = Linus::jsondiff::JsonDiffer::compare_object(level_, true);
+                    score_ = Linus::jsondiff::JsonDiffer::drill_obj(level.left[sleft], level.right[sright]);
                     break;
                 }
                 case 1:
                 {
-                    Linus::jsondiff::TreeLevel level_(level.left[sleft], level.right[sright]);
-                    score_ = Linus::jsondiff::JsonDiffer::compare_array(level_, true);
+                    //Linus::jsondiff::TreeLevel level_(level.left[sleft], level.right[sright]);
+                    //score_ = Linus::jsondiff::JsonDiffer::compare_array(level_, true);
+                    score_ = Linus::jsondiff::JsonDiffer::drill_LCS(level.left[sleft], level.right[sright]);
                     break;
                 }
                 case 2:
-                    score_ = (std::strcmp(level.left[sleft].GetString(), level.right[sright].GetString()));
+                    score_ = (std::strcmp(level.left[sleft].GetString(), level.right[sright].GetString()) == 0);
                     break;
                 case 3:
                     score_ = (level.left[sleft].GetInt() == level.right[sright].GetInt());
@@ -692,17 +835,17 @@ std::map<unsigned int, unsigned int> Linus::jsondiff::JsonDiffer::Hirschberg(Lin
         {
             score_ = 0;
         }
-        if (score_ > SIMILARITY_THRESHOLD)
+        if (score_ >= SIMILARITY_THRESHOLD)
         {
             pair_list[sleft] = sright;
         }
     }
     else
     {
-        unsigned int left_mid = len_left / 2;
+        unsigned int left_mid = (sleft + eleft) / 2;
         //std::cout << "left_mid " << left_mid << std::endl;
         std::vector<double> scoreL = NWScore(false, level, true, type_left, sleft, left_mid, type_right, sright, eright);
-        std::vector<double> scoreR = NWScore(true, level, true, type_left, left_mid, eleft, type_right, sright, eright);
+        std::vector<double> scoreR = NWScore(true, level, true, type_left, left_mid + 1, eleft, type_right, sright, eright);
         std::reverse(scoreR.begin(), scoreR.end());
         unsigned int right_mid;
         double max = -1;
@@ -712,14 +855,15 @@ std::map<unsigned int, unsigned int> Linus::jsondiff::JsonDiffer::Hirschberg(Lin
             if (score_ > max)
             {
                 max = score_;
-                right_mid = i;
+                right_mid = sright + i;
             }
         }
+        //std::cout << "right_mid " << right_mid << std::endl;
         for (const auto& pair : Hirschberg(level, drill, type_left, sleft, left_mid, type_right, sright, right_mid)) 
         {
             pair_list.insert(pair);
         }
-        for (const auto& pair : Hirschberg(level, drill, type_left, left_mid, eleft, type_right, right_mid, eright)) 
+        for (const auto& pair : Hirschberg(level, drill, type_left, left_mid + 1, eleft, type_right, right_mid + 1, eright)) 
         {
             pair_list.insert(pair);
         }
@@ -741,29 +885,37 @@ std::map<unsigned int, unsigned int> Linus::jsondiff::JsonDiffer::Hirschberg_sta
     {
         type_right[j] = Linus::jsondiff::JsonDiffer::get_type(level.right[j]);
     }
-    return Hirschberg(level, true, type_left, 0, level.left.Size(), type_right, 0, level.right.Size());
+    return Hirschberg(level, true, type_left, 0, len_left-1, type_right, 0, len_right-1);
 }
 
 double Linus::jsondiff::JsonDiffer::compare_array_advanced(Linus::jsondiff::TreeLevel level, bool drill)
 {
     std::map<unsigned int, unsigned int> pairlist;
+    //auto start = std::chrono::high_resolution_clock::now();
     if (num_thread == 1)
     {
-        //pairlist = LCS(level, drill);
+        if(!hirscheburg) pairlist = LCS(level, drill);
+        else pairlist = Hirschberg_starter(level);
         //pairlist = Hirschberg_starter(level);
-        Linus::jsondiff::BottomUpLCS BU(level, *this);
-        pairlist = BU.bu_computing();
+        /*Linus::jsondiff::BottomUpLCS BU(level, *this);
+        BU.bu_computing();
+        pairlist = BU.LCS();*/
     }
     else
     {
         pairlist = parallel_LCS(level);
     }
+    //auto finish = std::chrono::high_resolution_clock::now();
+    //std::chrono::duration<double> elapsed = finish - start;
+    //std::cout << "TopDown LCS: " << elapsed.count() << " s\n";
+    //std::cout << "BottomUp time: " << elapsed.count() << " s\n";
     std::vector<unsigned int> paired_left;
     std::vector<unsigned int> paired_right;
     for (const auto& pair : pairlist)
     {
         paired_left.push_back(pair.first);
         paired_right.push_back(pair.second);
+        //std::cout << "Pair Left " << pair.first << " Right " << pair.second << std::endl;
     }
     unsigned int len_left = level.left.Size();
     unsigned int len_right = level.right.Size();
@@ -782,6 +934,7 @@ double Linus::jsondiff::JsonDiffer::compare_array_advanced(Linus::jsondiff::Tree
             Linus::jsondiff::TreeLevel level_(level.left[pair.first], level.right[pair.second], left_path, right_path, level.left_path);
             score_ = diff_level(level_, drill);
             total_score += score_;
+            //std::cout << "Pair Left " << pair.first << " Right " << pair.second << std::endl;
         }
         else
         {
@@ -821,6 +974,7 @@ double Linus::jsondiff::JsonDiffer::compare_array_advanced(Linus::jsondiff::Tree
             Linus::jsondiff::JsonDiffer::report(EVENT_ARRAY_ADD, level_);
         }
     }
+    //std::cout << "Compare_array_advanced finished" << std::endl;
     return total_score / std::max(len_left, len_right);
 }
 
@@ -988,7 +1142,7 @@ double Linus::jsondiff::JsonDiffer::_diff_level(Linus::jsondiff::TreeLevel level
 
 double Linus::jsondiff::JsonDiffer::diff_level(Linus::jsondiff::TreeLevel level, bool drill)
 {
-    std::ostringstream oss;
+    /*std::ostringstream oss;
     oss << "[" << level.get_key() << "]@[" << std::boolalpha << drill << "]";
     std::string cache_key = oss.str();
     if (cache.find(cache_key) == cache.end())
@@ -997,7 +1151,8 @@ double Linus::jsondiff::JsonDiffer::diff_level(Linus::jsondiff::TreeLevel level,
         cache[cache_key] = score;
     }
     double score = cache[cache_key];
-    return score;
+    return score;*/
+    return _diff_level(level, drill);
 }
 
 bool Linus::jsondiff::JsonDiffer::diff()
@@ -1006,196 +1161,310 @@ bool Linus::jsondiff::JsonDiffer::diff()
     return Linus::jsondiff::JsonDiffer::diff_level(root_level, false) == 1.0;
 }
 
-Linus::jsondiff::BottomUpLCS::BottomUpLCS(Linus::jsondiff::TreeLevel level_, Linus::jsondiff::JsonDiffer& differ) : level(level_), jsondiffer(differ)
+Linus::jsondiff::BottomUpLCS::BottomUpLCS(Linus::jsondiff::TreeLevel& level, Linus::jsondiff::JsonDiffer& differ) : level(level), differ(differ)
 {
-    locate_array(level.left, empty_string, 0, false);   
-    locate_array(level.right, empty_string, 0, true);
+    Linus::jsondiff::BottomUpLCS::locate_left_array(level.left, 0);
+    Linus::jsondiff::BottomUpLCS::locate_right_array(level.right, 0);
 }
 
-int Linus::jsondiff::BottomUpLCS::get_type(const rapidjson::Value& input)
+void Linus::jsondiff::BottomUpLCS::locate_left_array(const rapidjson::Value& tree, unsigned int layer)
 {
-    if (input.IsObject())
+    if (tree.IsArray())
     {
-        return 0;
+        if(layer != 0) left_array[layer].push_back(&tree);
+        unsigned int len = tree.Size();
+        for (unsigned int i = 0; i < len; ++i)
+        {
+            locate_left_array(tree[i], layer + 1);
+        }
     }
-    else if (input.IsArray())
+    else if (tree.IsObject())
     {
-        return 1;
+        for (rapidjson::Value::ConstMemberIterator itr = tree.MemberBegin(); itr != tree.MemberEnd(); ++itr)
+        {
+            locate_left_array(tree[itr->name], layer + 1);
+        }
     }
     else
     {
-        return 6;
+        return;
     }
 }
 
-void Linus::jsondiff::BottomUpLCS::locate_array(const rapidjson::Value& tree, const std::string& path, unsigned int layer, bool lr)
+void Linus::jsondiff::BottomUpLCS::locate_right_array(const rapidjson::Value& tree, unsigned int layer)
 {
-    int tree_type = Linus::jsondiff::BottomUpLCS::get_type(tree);
-    switch (tree_type)
+    if (tree.IsArray())
     {
-        case 0:{
-            std::vector<std::string> keys = KeysFromObject(tree);
-            for (const auto& item : keys)
-            {
-                int type = Linus::jsondiff::BottomUpLCS::get_type(tree[item.c_str()]);
-                std::ostringstream new_path;
-                new_path << path << "/" << item;
-                switch (type)
-                {
-                    case 0:
-                        locate_array(tree[item.c_str()], new_path.str(), layer + 1, lr);
-                        break;
-                    case 1:
-                        if (lr)
-                        {
-                            right_nested_array[layer + 1].push_back(new_path.str());
-                        }
-                        else
-                        {
-                            left_nested_array[layer + 1].push_back(new_path.str());
-                        }
-                        locate_array(tree[item.c_str()], new_path.str(), layer + 1, lr);
-                        break;
-                    default:
-                        break;
-                }
-            }
-            break;
-        }
-        case 1: {
-            unsigned int length = tree.Size();
-            for (unsigned int i = 0; i < length; ++i)
-            {
-                int type = Linus::jsondiff::BottomUpLCS::get_type(tree[i]);
-                std::ostringstream new_path;
-                new_path << path << "/" << std::to_string(i);
-                switch (type)
-                {
-                    case 0:
-                        locate_array(tree[i], new_path.str(), layer + 1, lr);
-                        break;
-                    case 1:
-                        if (lr)
-                        {
-                            right_nested_array[layer + 1].push_back(new_path.str());
-                        }
-                        else
-                        {
-                            left_nested_array[layer + 1].push_back(new_path.str());
-                        }
-                        locate_array(tree[i], new_path.str(), layer + 1, lr);
-                        break;
-                    default:
-                        break;
-                }
-            }
-            break;
-        }
-        default:
-            break;
-    }  
-}
-
-bool Linus::jsondiff::BottomUpLCS::isUInt(const std::string& s) 
-{
-    if (s.empty() || (!isdigit(s[0]) && s[0] != '+')) return false;
-    char* p;
-    strtol(s.c_str(), &p, 10);
-    return (*p == 0);
-}
-
-bool Linus::jsondiff::BottomUpLCS::path_same(const std::string& left_path, const std::string& right_path)
-{
-    std::string trimmedS1 = left_path.substr(1);
-    std::string trimmedS2 = right_path.substr(1);
-
-    std::istringstream stream1(trimmedS1);
-    std::istringstream stream2(trimmedS2);
-    std::string segment1, segment2;
-
-    while (std::getline(stream1, segment1, '/') && std::getline(stream2, segment2, '/')) 
-    {
-        bool isSegment1UInt = isUInt(segment1);
-        bool isSegment2UInt = isUInt(segment2);
-
-        if (!isSegment1UInt || !isSegment2UInt) 
+        if(layer != 0) right_array[layer].push_back(&tree);
+        unsigned int len = tree.Size();
+        for (unsigned int i = 0; i < len; ++i)
         {
-            if (!isSegment1UInt && !isSegment2UInt) 
-            {
-                if (segment1 != segment2) 
-                {
-                    return false;
-                }
-            } 
-            else 
-            {
-                return false;
-            }
+            locate_right_array(tree[i], layer + 1);
         }
     }
-    return true;
+    else if (tree.IsObject())
+    {
+        for (rapidjson::Value::ConstMemberIterator itr = tree.MemberBegin(); itr != tree.MemberEnd(); ++itr)
+        {
+            locate_right_array(tree[itr->name], layer + 1);
+        }
+    }
+    else
+    {
+        return;
+    }
 }
 
-std::map<unsigned int, unsigned int> Linus::jsondiff::BottomUpLCS::bu_computing()
+void Linus::jsondiff::BottomUpLCS::bu_computing()
 {
-    unsigned int deepest = min(left_nested_array.rbegin()->first, right_nested_array.rbegin()->first);
-    unsigned int highest = max(left_nested_array.begin()->first, right_nested_array.begin()->first);
-    for (int i = deepest; i >= highest; --i)
+    unsigned int deepest = std::min(left_array.rbegin()->first, right_array.rbegin()->first);
+    unsigned int highest = std::max(left_array.begin()->first, right_array.begin()->first);
+    for (unsigned int i = deepest; i >= highest; --i)
     {
-        for (const auto& left_path : left_nested_array[i])
+        for (auto lit = left_array[i].begin(); lit != left_array[i].end(); ++lit)
         {
-            for (const auto& right_path : right_nested_array[i])
+            for (auto rit = right_array[i].begin(); rit != right_array[i].end(); ++rit)
             {
-                if (path_same(left_path, right_path))
-                {
-                    LCS(left_path, right_path);
-                }
+                Linus::jsondiff::BottomUpLCS::inter_LCS(*lit, *rit, i);
             }
         }
-        std::cout << "layer: " << i << std::endl;
-    }
-    unsigned int len_left = level.left.Size();
-    unsigned int len_right = level.right.Size();
-    std::vector<std::vector<double>> dp(len_left + 1, std::vector<double>(len_right + 1, 0.0));
-    for (unsigned int i = 1; i <= len_left; ++i)
-    {
-        for (unsigned int j = 1; j <= len_right; ++j)
+        if (i != left_array.rbegin()->first && i != right_array.rbegin()->first)
         {
-            std::ostringstream query;
-            query << "[/" << std::to_string(i - 1) << "]@[/" << std::to_string(j - 1) << "]";
-            dp[i][j] = history[query.str()];
+            history[i+1].clear();
         }
+    }
+}
+
+void Linus::jsondiff::BottomUpLCS::inter_LCS(const rapidjson::Value* ptr_left, const rapidjson::Value* ptr_right, unsigned int layer)
+{
+    const rapidjson::Value& left = *ptr_left;
+    const rapidjson::Value& right = *ptr_right;
+    unsigned int len_left = left.Size();
+    unsigned int len_right = right.Size();
+    if (len_left == 0 && len_right == 0)
+    {
+        history[layer][ptr_left][ptr_right] = 1.0;
+        return;
+    }
+    if (len_left == 0 || len_right == 0)
+    {
+        history[layer][ptr_left][ptr_right] = 0.0;
+        return;
     }
     std::vector<int> type_left(len_left);
     std::vector<int> type_right(len_right);
     for (unsigned int i = 0; i < len_left; ++i)
     {
-        type_left[i] =  jsondiffer.get_type(level.left[i]);
+        type_left.push_back(differ.get_type(left[i]));
     }
     for (unsigned int j = 0; j < len_right; ++j)
     {
-        type_right[j] = jsondiffer.get_type(level.right[j]);
+        type_right.push_back(differ.get_type(right[j]));
+    }
+    std::vector<std::vector<double>> dp(len_left + 1, std::vector<double>(len_right + 1, 0.0));
+    for (unsigned int i = 1; i <= len_left; ++i)
+    {
+        for (unsigned int j = 1; j <= len_right; ++j)
+        {
+            double score_;
+            if (type_left[i-1] == type_right[j-1])
+            {
+                switch (type_left[i-1])
+                {
+                    case 0:
+                    {
+                        score_ = compare_object(left[i - 1], right[j - 1], layer + 1);
+                        break;
+                    }
+                    case 1:
+                    {
+                        score_ = history[layer + 1][&left[i - 1]][&right[j - 1]];
+                        break;
+                    }
+                    case 2:
+                        score_ = (std::strcmp(left[i-1].GetString(), right[j-1].GetString()));
+                        break;
+                    case 3:
+                        score_ = (left[i-1].GetInt() == right[j-1].GetInt());
+                        break;
+                    case 4:
+                        score_ = (left[i-1].GetDouble() == right[j-1].GetDouble());
+                        break;
+                    case 5:
+                        score_ = (left[i-1].GetBool() == right[j-1].GetBool());
+                        break;
+                    case 6:
+                        score_ = 1;
+                        break;
+                    default:
+                        score_ = 0;
+                        break;
+                }
+            }
+            else
+            {
+                score_ = 0;
+            }
+            if (score_ >= differ.SIMILARITY_THRESHOLD)
+            {
+                dp[i][j] = dp[i - 1][j - 1] + score_;
+            }
+            else
+            {
+                dp[i][j] = std::max(dp[i - 1][j], dp[i][j - 1]);
+            }
+        }
+    }
+    history[layer][ptr_left][ptr_right] = dp[len_left][len_right] / max(len_left, len_right);
+}
+
+double Linus::jsondiff::BottomUpLCS::compare_object(const rapidjson::Value& left, const rapidjson::Value& right, unsigned int layer)
+{
+    if (left.ObjectEmpty() && right.ObjectEmpty()) return 1.0;
+    if (left.ObjectEmpty() || right.ObjectEmpty()) return 0.0;
+    double score = 0;
+    unsigned int count = 0;
+    for (auto iter = left.MemberBegin(); iter != left.MemberEnd(); ++iter)
+    {
+        const char* key = iter->name.GetString();
+        if (right.HasMember(key))
+        {
+            ++count;
+            double score_;
+            int type_left = differ.get_type(iter->value);
+            int type_right = differ.get_type(right[key]);
+            if (type_left == type_right)
+            {
+                //std::cout << "Value Left " << iter->value.GetString() << " Right " << right[key].GetString() << std::endl;
+                switch (type_left)
+                {
+                    case 0:
+                    {
+                        score_ = Linus::jsondiff::BottomUpLCS::compare_object(iter->value, right[key], layer + 1);
+                        break;
+                    }
+                    case 1:
+                    {
+                        score_ = history[layer + 1][&iter->value][&right[key]];
+                        break;
+                    }
+                    case 2:
+                        score_ = (std::strcmp(iter->value.GetString(), right[key].GetString()) == 0) ? 1 : 0;
+                        break;
+                    case 3:
+                        score_ = (iter->value.GetInt() == right[key].GetInt());
+                        break;
+                    case 4:
+                        score_ = (iter->value.GetDouble() == right[key].GetDouble());
+                        break;
+                    case 5:
+                        score_ = (iter->value.GetBool() == right[key].GetBool());
+                        break;
+                    case 6:
+                        score_ = 1;
+                        break;
+                    default:
+                        score_ = 0;
+                        break;
+                }
+            }
+            else
+            {
+                score_ = 0;
+            }
+            score += score_;
+        }
+    }
+    return score / (left.MemberCount() + right.MemberCount() - count);
+}
+
+std::map<unsigned int, unsigned int> Linus::jsondiff::BottomUpLCS::LCS()
+{
+    unsigned int len_left = level.left.Size();
+    unsigned int len_right = level.right.Size();
+    std::vector<int> type_left(len_left);
+    std::vector<int> type_right(len_right);
+    std::vector<std::vector<double>> dp(len_left + 1, std::vector<double>(len_right + 1, 0.0));
+    for (unsigned int i = 0; i < len_left; ++i)
+    {
+        type_left[i] =  differ.get_type(level.left[i]);
+    }
+    for (unsigned int j = 0; j < len_right; ++j)
+    {
+        type_right[j] = differ.get_type(level.right[j]);
+    }
+    for (unsigned int i = 1; i <= len_left; ++i)
+    {
+        for (unsigned int j = 1; j <= len_right; ++j)
+        {
+            double score_;
+            if (type_left[i-1] == type_right[j-1])
+            {
+                switch (type_left[i-1])
+                {
+                    case 0:
+                    {
+                        score_ = Linus::jsondiff::BottomUpLCS::compare_object(level.left[i - 1], level.right[j - 1], 1);
+                        break;
+                    }
+                    case 1:
+                    {
+                        score_ = history[1][&level.left[i - 1]][&level.right[j - 1]];
+                        //std::cout << score_ << std::endl;
+                        break;
+                    }
+                    case 2:
+                        score_ = (std::strcmp(level.left[i-1].GetString(), level.right[j-1].GetString()));
+                        break;
+                    case 3:
+                        score_ = (level.left[i-1].GetInt() == level.right[j-1].GetInt());
+                        break;
+                    case 4:
+                        score_ = (level.left[i-1].GetDouble() == level.right[j-1].GetDouble());
+                        break;
+                    case 5:
+                        score_ = (level.left[i-1].GetBool() == level.right[j-1].GetBool());
+                        break;
+                    case 6:
+                        score_ = 1;
+                        break;
+                    default:
+                        score_ = 0;
+                        break;
+                }
+            }
+            else
+            {
+                score_ = 0;
+            }
+            if (score_ >= differ.SIMILARITY_THRESHOLD)
+            {
+                dp[i][j] = dp[i - 1][j - 1] + score_;
+            }
+            else
+            {
+                dp[i][j] = std::max(dp[i - 1][j], dp[i][j - 1]);
+            }
+        }
     }
     std::map<unsigned int, unsigned int> pair_list;
     unsigned int i = len_left;
     unsigned int j = len_right;
     while (i > 0 && j > 0)
     {
-        double score_ = 0;
-        if (type_left[i - 1] == type_right[j - 1])
+        double score_;
+        if (type_left[i-1] == type_right[j-1])
         {
-            switch (type_left[i - 1])
+            switch (type_left[i-1])
             {
                 case 0:
                 {
-                    Linus::jsondiff::TreeLevel level_(level.left[i - 1], level.right[j - 1]);
-                    score_ = jsondiffer.compare_object(level_, true);
+                    score_ = Linus::jsondiff::BottomUpLCS::compare_object(level.left[i - 1], level.right[j - 1], 1);
                     break;
                 }
                 case 1:
                 {
-                    Linus::jsondiff::TreeLevel level_(level.left[i - 1], level.right[j - 1]);
-                    score_ = jsondiffer.compare_array(level_, true);
+                    score_ = history[1][&level.left[i - 1]][&level.right[j - 1]];
                     break;
                 }
                 case 2:
@@ -1218,7 +1487,12 @@ std::map<unsigned int, unsigned int> Linus::jsondiff::BottomUpLCS::bu_computing(
                     break;
             }
         }
-        if (score_ > jsondiffer.SIMILARITY_THRESHOLD)
+        else
+        {
+            score_ = 0;
+        }
+        if (score_ >= differ.SIMILARITY_THRESHOLD)
+        //if (score_ == 1)
         {
             pair_list[i - 1] = j - 1;
             --i;
@@ -1233,171 +1507,6 @@ std::map<unsigned int, unsigned int> Linus::jsondiff::BottomUpLCS::bu_computing(
             --j;
         }
     }
+    history.clear();
     return pair_list;
-}
-
-void Linus::jsondiff::BottomUpLCS::LCS(const std::string& left_path, const std::string& right_path)
-{
-    double score = 0;
-    const rapidjson::Value& left_value = *rapidjson::Pointer(left_path.c_str()).Get(level.left);
-    const rapidjson::Value& right_value = *rapidjson::Pointer(right_path.c_str()).Get(level.right);
-    unsigned int len_left = left_value.Size();
-    unsigned int len_right = right_value.Size();
-    std::vector<int> type_left(len_left);
-    std::vector<int> type_right(len_right);
-    std::vector<std::vector<double>> dp(len_left + 1, std::vector<double>(len_right + 1, 0.0));
-
-    for (unsigned int i = 0; i < len_left; ++i)
-    {
-        type_left[i] =  jsondiffer.get_type(level.left[i]);
-    }
-    for (unsigned int j = 0; j < len_right; ++j)
-    {
-        type_right[j] = jsondiffer.get_type(level.right[j]);
-    }
-    for (unsigned int i = 1; i <= len_left; ++i)
-    {
-        for (unsigned int j = 1; j <= len_right; ++j)
-        {
-            double score_;
-            if (type_left[i-1] == type_right[j-1])
-            {
-                switch (type_left[i-1])
-                {
-                    case 0:
-                    {
-                        Linus::jsondiff::TreeLevel level_(left_value[i - 1], right_value[j - 1]);
-                        std::ostringstream path_left;
-                        path_left << left_path << "/" << std::to_string(i - 1);
-                        std::ostringstream path_right;
-                        path_right << right_path << "/" << std::to_string(j - 1);
-                        score_ = object_compare(level_, path_left.str(), path_right.str());
-                        break;
-                    }
-                    case 1:
-                    {
-                        std::ostringstream query;
-                        query << "[" << left_path << "/" << std::to_string(i - 1) << "]@[" << right_path << "/" << std::to_string(i - 1) << "]";
-                        score_ = history[query.str()];
-                        break;
-                    }
-                    case 2:
-                        score_ = (std::strcmp(left_value[i - 1].GetString(), right_value[j - 1].GetString()));
-                        break;
-                    case 3:
-                        score_ = (left_value[i-1].GetInt() == right_value[j-1].GetInt());
-                        break;
-                    case 4:
-                        score_ = (left_value[i-1].GetDouble() == right_value[j-1].GetDouble());
-                        break;
-                    case 5:
-                        score_ = (left_value[i-1].GetBool() == right_value[j-1].GetBool());
-                        break;
-                    case 6:
-                        score_ = 1;
-                        break;
-                    default:
-                        score_ = 0;
-                        break;
-                }
-            }
-            else
-            {
-                score_ = 0;
-            }
-            if (score_ > jsondiffer.SIMILARITY_THRESHOLD)
-            {
-                dp[i][j] = dp[i - 1][j - 1] + score_;
-            }
-            else
-            {
-                dp[i][j] = std::max(dp[i - 1][j], dp[i][j - 1]);
-            }
-        }
-    }
-    std::ostringstream query;
-    query << "[" << left_path << "]@[" << right_path << "]";
-    history[query.str()] = dp[len_left][len_right];
-}
-
-double Linus::jsondiff::BottomUpLCS::object_compare(Linus::jsondiff::TreeLevel level_, const std::string& left_path, const std::string& right_path)
-{
-    double score = 0;
-    std::vector<std::string> left_keys = KeysFromObject(level_.left);
-    std::vector<std::string> right_keys = KeysFromObject(level_.right);
-    std::vector<std::string> all_keys;
-    all_keys.insert(all_keys.end(), left_keys.begin(), left_keys.end());
-    all_keys.insert(all_keys.end(), right_keys.begin(), right_keys.end());
-    std::sort(all_keys.begin(), all_keys.end());
-    auto last = std::unique(all_keys.begin(), all_keys.end());
-    all_keys.erase(last, all_keys.end());
-
-    double score_;
-    for (const auto& item : all_keys)
-    {
-        if ((std::find(left_keys.begin(), left_keys.end(), item) != left_keys.end()) && (std::find(right_keys.begin(), right_keys.end(), item) != right_keys.end()))
-        {
-            int left_type = jsondiffer.get_type(level_.left[item.c_str()]);
-            int right_type = jsondiffer.get_type(level_.right[item.c_str()]);
-            if (left_type == right_type)
-            {
-                switch (left_type)
-                {
-                    case 0:
-                    {
-                        Linus::jsondiff::TreeLevel _level(level_.left[item.c_str()], level_.right[item.c_str()]);
-                        std::ostringstream path_left;
-                        path_left << left_path << "/" << item;
-                        std::ostringstream path_right;
-                        path_right << right_path << "/" << item;
-                        //std::cout << path_left.str() << " " << path_right.str() << std::endl;
-                        score_ = object_compare(_level, path_left.str(), path_right.str());
-                        break;
-                    }
-                    case 1:
-                    {
-                        std::ostringstream query;
-                        query << "[" << left_path << "/" << item << "]@[" << right_path << "/" << item << "]";
-                        score_ = history[query.str()];
-                        break;
-                    }
-                    case 2:
-                    {
-                        /*if (left_path == "/9487/payload/release/assets/2/uploader" && right_path == "/9487/payload/release/assets/2/uploader")
-                        {
-                            std::ostringstream path_left;
-                            path_left << left_path << "/" << item;
-                            std::ostringstream path_right;
-                            path_right << right_path << "/" << item;
-                            std::cout << path_left.str() << " " << path_right.str() << std::endl;
-                        }*/
-                        score_ = (std::strcmp(level_.left[item.c_str()].GetString(), level_.right[item.c_str()].GetString()));
-                        break;
-                    }
-                    case 3:
-                        score_ = (level_.left[item.c_str()].GetInt() == level_.right[item.c_str()].GetInt());
-                        break;
-                    case 4:
-                        score_ = (level_.left[item.c_str()].GetDouble() == level_.right[item.c_str()].GetDouble());
-                        break;
-                    case 5:
-                        score_ = (level_.left[item.c_str()].GetBool() == level_.right[item.c_str()].GetBool());
-                        break;
-                    case 6:
-                        score_ = 1;
-                        break;
-                    default:
-                        score_ = 0;
-                        break;
-                }
-                score += score_;
-            }
-            continue;
-        }
-    }
-    if (all_keys.empty())
-    {
-        return 1;
-    }
-    return score / all_keys.size();
 }

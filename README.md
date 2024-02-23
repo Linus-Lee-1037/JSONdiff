@@ -62,7 +62,7 @@ For large-file-left.json and large-file-right.json with the size of 25 MB, the p
 ![examples](https://github.com/Linus-Lee-1037/JSONdiff/blob/main/figure/Large-file-result.png)
 
 ## Compilation
-This work is based on a x86_64 Windows system. To compile it, you'd best install [rapidjson](https://rapidjson.org/) first. Then refer the following shell commandline code:
+This work is based on a x86_64 Windows system. To compile it, you'd best install [RapidJSON](https://rapidjson.org/) first. Then refer the following shell commandline code:
 ```bash
 g++.exe -fdiagnostics-color=always -Ofast "path\to\JsonDiff\jsondiff.cpp" "path\to\JsonDiff\src\*.cpp" -o "path\to\jsondiff.exe" "-Ipath\to\JsonDiff\include" "-Ipath\to\rapidjson\include"
 ```
@@ -76,3 +76,4 @@ g++.exe -fdiagnostics-color=always -Ofast "path\to\JsonDiff\jsondiff.cpp" "path\
 ## Reference
 1. [JYCM](https://github.com/eggachecat/jycm)
 2. [Hirscheberg's algorithm](https://en.wikipedia.org/wiki/Hirschberg%27s_algorithm)
+3. [RapidJSON](https://rapidjson.org/)

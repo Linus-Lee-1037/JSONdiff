@@ -73,4 +73,6 @@ g++.exe -fdiagnostics-color=always -Ofast "path\to\JsonDiff\jsondiff.cpp" "path\
 -advanced or -A: enable the advanced mode.<br>
 -hirscheberg or -H: enable the Hirscheberg algorithm (hint: you must enbale the advanced mode first).<br>
 
-
+## Reference
+1. [JYCM](https://github.com/eggachecat/jycm)
+2. [Hirscheberg's algorithm](https://en.wikipedia.org/wiki/Hirschberg%27s_algorithm)
